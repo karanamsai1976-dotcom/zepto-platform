@@ -7,7 +7,7 @@ assistant served over HTTP.
 ## Status
 
 **All four modules are ported and verified end to end** — `core`, `ingestion`,
-`analytics`, and `assistant` — fully typed, covered by 296 tests at ~100% branch
+`analytics`, and `assistant` — fully typed, covered by 342 tests at ~100% branch
 coverage, enforced in CI on every push.
 
 Latest measured assistant quality, against a labelled 34-case evaluation set
@@ -174,13 +174,36 @@ The questions are written the way a customer would phrase them and deliberately
 avoid reusing the corpus wording, so this measures semantic retrieval rather than
 keyword overlap.
 
+## Notebooks
+
+[`notebooks/01_titanic_narrative.ipynb`](notebooks/01_titanic_narrative.ipynb) walks
+through the dataset and what the model actually learned, with outputs committed so it
+reads on GitHub without running anything.
+
+It contains **no analysis logic**. Every computation is imported from
+`src/zepto/analytics`, so the notebook cannot quietly disagree with the code that
+ships. Three tests keep that true: one executes every notebook against the current
+source tree, one rejects any `def` or `class` defined inside a notebook, and one
+requires that notebooks import from the package.
+
+That first test matters more than it sounds. Notebooks are imported by nothing, so a
+rename breaks them without breaking a build, and the failure surfaces whenever someone
+next opens the file — often months later. Running them in CI makes it a failure on the
+commit that caused it.
+
+```bash
+pip install -e ".[all,dev]"
+jupyter lab notebooks/
+```
+
 ## Development
 
 ```bash
-ruff check .          # lint
-ruff format .         # format
-mypy src tests        # type check
-pytest                # tests + coverage (gate: 90%)
+ruff check .              # lint
+ruff format .             # format
+mypy src tests            # type check
+pytest                    # tests + coverage (gate: 90%)
+pytest -m "not integration"   # skip notebook execution for a faster loop
 ```
 
 All four run automatically on every commit via pre-commit, and again in CI on every
@@ -302,9 +325,10 @@ which is exactly how this class of harm normally goes unnoticed.
 | 3 | Port `assistant`: model lifecycle, input limits, real confidence, abstain path, HTTP API | ✅ Done |
 | 4 | Retrieval evaluation: labelled set, hit rate, MRR, scope-decision scoring | ✅ Done |
 | 5 | Model card: intersectional disaggregation, trivial-baseline comparison | ✅ Done |
-| 6 | API hardening: auth, rate limiting, metrics, distributed tracing | Next |
-| 7 | RAG quality: reranking, chunking strategy, prompt-injection defenses | Planned |
-| 8 | Deployment: hardened image, dependency lockfile, secret management, monitoring | Planned |
+| 6 | Narrative notebook over tested modules, with a CI rot guard | ✅ Done |
+| 7 | API hardening: auth, rate limiting, metrics, distributed tracing | Next |
+| 8 | RAG quality: reranking, chunking strategy, prompt-injection defenses | Planned |
+| 9 | Deployment: hardened image, dependency lockfile, secret management, monitoring | Planned |
 
 ### v1 defects addressed so far
 
@@ -320,7 +344,7 @@ which is exactly how this class of harm normally goes unnoticed.
 | Leakage prevented only by a comment and a `drop()` call | Fixed — two automatic guards, one behavioural |
 | Train-only preprocessing enforced by convention | Fixed — structural, via `Pipeline` composition |
 | Single model artifact, overwritten, with no provenance | Fixed — versioned registry with environment metadata |
-| ML logic trapped in notebooks, untestable | Fixed — importable modules, 191 tests |
+| ML logic trapped in notebooks, untestable | Fixed — importable modules; notebooks now hold narrative only, enforced by tests |
 | Embedding model reloaded on every query (~5s) | Fixed — loaded once, 148ms per query |
 | No input length limit on an unauthenticated endpoint | Fixed — bounded at the schema, rejected with 422 |
 | Retry path that could never succeed, and was never tested | Fixed — prompt and parser agree; retry loop covered by tests |
