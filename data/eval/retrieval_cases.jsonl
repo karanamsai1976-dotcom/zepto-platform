@@ -1,0 +1,34 @@
+{"query": "How much does shipping cost?", "expected": ["doc_01"]}
+{"query": "Do I pay extra if my basket is small?", "expected": ["doc_01"]}
+{"query": "How fast will my groceries arrive?", "expected": ["doc_01"]}
+{"query": "Can I pay to get my order sooner?", "expected": ["doc_01"]}
+{"query": "Do you deliver outside the city?", "expected": ["doc_01"]}
+{"query": "How long do I have to send something back?", "expected": ["doc_02"]}
+{"query": "When will my money come back to me?", "expected": ["doc_02"]}
+{"query": "Can I return shampoo I already opened?", "expected": ["doc_02"]}
+{"query": "Do I have to pay to send an item back?", "expected": ["doc_02"]}
+{"query": "What do I get if I subscribe monthly?", "expected": ["doc_03"]}
+{"query": "How much is the premium plan?", "expected": ["doc_03"]}
+{"query": "If I stop my subscription halfway through the month, do I get money back?", "expected": ["doc_03"]}
+{"query": "Is there a plan that gives me early access to deals?", "expected": ["doc_03"]}
+{"query": "How can I see where my rider is?", "expected": ["doc_04"]}
+{"query": "My order has not moved in half an hour, what should I do?", "expected": ["doc_04"]}
+{"query": "Does the arrival time update by itself?", "expected": ["doc_04"]}
+{"query": "Can I stop an order after placing it?", "expected": ["doc_05"]}
+{"query": "Why can I no longer call off my order?", "expected": ["doc_05"]}
+{"query": "What happens if no rider is available?", "expected": ["doc_05"]}
+{"query": "Something was missing from my bag, what now?", "expected": ["doc_06", "doc_02"]}
+{"query": "Do I need to send a photo if my order was expensive?", "expected": ["doc_06"]}
+{"query": "An item arrived crushed, do I have to send it back?", "expected": ["doc_06", "doc_02"]}
+{"query": "What amounts can I buy a voucher for?", "expected": ["doc_07"]}
+{"query": "How long before a voucher expires?", "expected": ["doc_07"]}
+{"query": "Can I use two vouchers at once?", "expected": ["doc_07"]}
+{"query": "Can I turn my voucher into cash?", "expected": ["doc_07"]}
+{"query": "When can I talk to someone?", "expected": ["doc_08"]}
+{"query": "How quickly do you reply to emails?", "expected": ["doc_08"]}
+{"query": "Is there a number I can ring?", "expected": ["doc_08"]}
+{"query": "Who won the world cup?", "expected": []}
+{"query": "What is the capital of France?", "expected": []}
+{"query": "How do I bake sourdough bread?", "expected": []}
+{"query": "What is the weather tomorrow?", "expected": []}
+{"query": "Recommend a good film to watch tonight", "expected": []}
