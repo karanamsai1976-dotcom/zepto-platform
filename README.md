@@ -10,14 +10,17 @@ assistant served over HTTP.
 `analytics`, and `assistant` — fully typed, covered by 296 tests at ~100% branch
 coverage, enforced in CI on every push.
 
-Latest verified assistant run:
+Latest measured assistant quality, against a labelled 34-case evaluation set
+(`zepto-eval`):
 
-| Query | Intent | Confidence | Source | Latency |
-| --- | --- | --- | --- | --- |
-| "What is the delivery fee?" | policy | 0.509 | `doc_01` | 250ms |
-| "What is your cancellation policy?" | policy | 0.477 | `doc_05` | 172ms |
-| "Who won the world cup?" | general | 0.000 | — | 15ms |
-| 5,000-character payload | — | — | — | rejected, HTTP 422 |
+| Metric | Score |
+| --- | --- |
+| Retrieval hit rate @1 | 86.2% |
+| Retrieval hit rate @3 | 96.6% |
+| Mean reciprocal rank | 0.914 |
+| Scope decision accuracy | 100% |
+| In-scope questions answered | 100% |
+| Out-of-scope questions declined | 100% |
 
 Latest verified ingestion run against the live source:
 
@@ -130,10 +133,27 @@ curl localhost:8000/ready
 
 ```bash
 ZEPTO_ASSISTANT_TOP_K=5
-ZEPTO_ASSISTANT_MIN_RELEVANCE=0.35   # abstain more readily
+ZEPTO_ASSISTANT_MIN_RELEVANCE=0.20   # decline more readily
 ZEPTO_ASSISTANT_MAX_QUERY_LENGTH=300
 ZEPTO_ASSISTANT_MOCK_LLM=false       # requires GROQ_API_KEY and `pip install groq`
 ```
+
+## Evaluating retrieval quality
+
+```bash
+zepto-eval
+```
+
+Scores retrieval, and the scope decision, against the labelled cases in
+`data/eval/retrieval_cases.jsonl`. Retrieval is reported as hit rate @1, hit rate
+@k, and mean reciprocal rank; the scope decision as separate in-scope and
+out-of-scope recalls, because the two mistakes cost different things. Failing
+cases are listed individually — a score tells you something regressed, the cases
+tell you what to do about it.
+
+The questions are written the way a customer would phrase them and deliberately
+avoid reusing the corpus wording, so this measures semantic retrieval rather than
+keyword overlap.
 
 ## Development
 
@@ -212,10 +232,29 @@ as a similarity score rather than a calibrated probability, because calibrating 
 would need labelled question-answer pairs this project does not have. Inventing that
 precision would be worse than not offering it.
 
-**The assistant abstains rather than guessing.** Retrieval always returns something —
+**The assistant declines rather than guessing.** Retrieval always returns something —
 asking a vector index about football still yields the nearest policy document. v1
 answered from it confidently. Below a configurable relevance floor, this declines
 instead.
+
+**Routing is by retrieval relevance, not keywords — and that change came from
+measurement, not taste.** v1 classified intent by testing the question against eight
+substrings, and this rebuild carried that over unchanged until the evaluation set
+existed. Measured against 29 real customer questions, keyword routing scored **3.4%
+recall**: it refused 28 of them, because customers ask *"How much does shipping
+cost?"* rather than *"What is the delivery fee?"*. The queries used for manual
+checking had all happened to contain keywords, which is exactly how the defect
+survived hand-verification.
+
+Relevance separates the same questions cleanly — in-scope 0.186–0.567, out-of-scope
+0.000–0.089, no overlap — so the keyword list was deleted and the floor moved to
+mid-gap. Scope accuracy went from 17.6% to 100%. The trade is that an off-topic
+question now embeds before being declined (~150ms rather than instant), which is
+worth answering 29 questions instead of one.
+
+The floor is calibrated on the same 34 cases it is scored against. That is a real
+limitation, noted in the code: as the set grows, recalibration belongs on a held-out
+split.
 
 **Errors do not leak internals.** An unhandled exception in v1's API returned a stack
 trace to the caller. Errors now map to status codes with a safe message, with detail
@@ -229,10 +268,11 @@ going to the logs, and a test asserts the leak does not happen.
 | 1 | Port `core` and `ingestion`, fixing the v1 defects | ✅ Done |
 | 2 | Port `analytics`: notebook logic extracted into importable modules, leakage guard, versioned model registry | ✅ Done |
 | 3 | Port `assistant`: model lifecycle, input limits, real confidence, abstain path, HTTP API | ✅ Done |
-| 4 | API hardening: auth, rate limiting, metrics, distributed tracing | Next |
-| 5 | ML maturity: experiment tracking, model card, notebooks as narrative wrappers | Planned |
-| 6 | RAG quality and AI safety: retrieval evaluation set, reranking, injection defenses | Planned |
-| 7 | Deployment: hardened image, dependency lockfile, secret management, monitoring | Planned |
+| 4 | Retrieval evaluation: labelled set, hit rate, MRR, scope-decision scoring | ✅ Done |
+| 5 | API hardening: auth, rate limiting, metrics, distributed tracing | Next |
+| 6 | ML maturity: experiment tracking, model card, notebooks as narrative wrappers | Planned |
+| 7 | RAG quality: reranking, chunking strategy, prompt-injection defenses | Planned |
+| 8 | Deployment: hardened image, dependency lockfile, secret management, monitoring | Planned |
 
 ### v1 defects addressed so far
 
@@ -257,6 +297,7 @@ going to the logs, and a test asserts the leak does not happen.
 | Stack traces returned to API callers | Fixed — safe messages, detail to logs |
 | Corpus edits silently never re-indexed | Fixed — upsert by stable id |
 | UTF-8 BOM leaking into served answers | Fixed — stripped at the source and on read |
+| Keyword routing refused 28 of 29 real questions | Fixed — relevance routing, 3.4% → 100% recall |
 | Unpinned dependencies, container runs as root | Pending (Phase 7) |
 
 ## License
