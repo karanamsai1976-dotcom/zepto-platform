@@ -6,9 +6,18 @@ assistant served over HTTP.
 
 ## Status
 
-**`core`, `ingestion`, and `analytics` are complete and verified end to end** — fully
-typed, covered by 191 tests at 100% branch coverage, enforced in CI on every push.
-`assistant` is not yet ported; see [Roadmap](#roadmap).
+**All four modules are ported and verified end to end** — `core`, `ingestion`,
+`analytics`, and `assistant` — fully typed, covered by 296 tests at ~100% branch
+coverage, enforced in CI on every push.
+
+Latest verified assistant run:
+
+| Query | Intent | Confidence | Source | Latency |
+| --- | --- | --- | --- | --- |
+| "What is the delivery fee?" | policy | 0.509 | `doc_01` | 250ms |
+| "What is your cancellation policy?" | policy | 0.477 | `doc_05` | 172ms |
+| "Who won the world cup?" | general | 0.000 | — | 15ms |
+| 5,000-character payload | — | — | — | rejected, HTTP 422 |
 
 Latest verified ingestion run against the live source:
 
@@ -102,6 +111,30 @@ ZEPTO_ANALYTICS_SELECTION_METRIC=roc_auc
 ZEPTO_ANALYTICS_MAX_SINGLE_FEATURE_ACCURACY=0.95   # tighten the leakage guard
 ```
 
+## Running the support assistant
+
+```bash
+zepto-serve
+```
+
+Starts the API on port 8000, indexing the policy corpus at startup if the vector
+store is empty. No API key is required: the default mode answers deterministically
+from retrieved policy text.
+
+```bash
+curl -X POST localhost:8000/ask -H 'Content-Type: application/json' \
+     -d '{"query": "What is the delivery fee?"}'
+curl localhost:8000/health
+curl localhost:8000/ready
+```
+
+```bash
+ZEPTO_ASSISTANT_TOP_K=5
+ZEPTO_ASSISTANT_MIN_RELEVANCE=0.35   # abstain more readily
+ZEPTO_ASSISTANT_MAX_QUERY_LENGTH=300
+ZEPTO_ASSISTANT_MOCK_LLM=false       # requires GROQ_API_KEY and `pip install groq`
+```
+
 ## Development
 
 ```bash
@@ -164,6 +197,30 @@ loading one under a different library version can succeed and behave subtly
 differently. Every artifact here records its training environment, and loading refuses
 a version mismatch by default.
 
+**The embedding model is loaded once, not per request.** v1 constructed a fresh
+`SentenceTransformer` inside its retrieval function, so every query paid the full
+model-loading cost — roughly five seconds, which is why its nine-test suite took forty
+seconds. Measured here at 148ms per query. The switch to ChromaDB's bundled ONNX build
+of the same `all-MiniLM-L6-v2` model also removes PyTorch, cutting ~2GB from the
+install for identical 384-dimensional vectors.
+
+**Confidence is measured, and named honestly.** v1 returned `confidence: 1.0` for
+every answer, including ones assembled from unrelated text — a field that looked
+meaningful and never was. Here it is cosine similarity to the best-matching passage:
+0.509 for a question the corpus answers, 0.035 for one it does not. It is documented
+as a similarity score rather than a calibrated probability, because calibrating it
+would need labelled question-answer pairs this project does not have. Inventing that
+precision would be worse than not offering it.
+
+**The assistant abstains rather than guessing.** Retrieval always returns something —
+asking a vector index about football still yields the nearest policy document. v1
+answered from it confidently. Below a configurable relevance floor, this declines
+instead.
+
+**Errors do not leak internals.** An unhandled exception in v1's API returned a stack
+trace to the caller. Errors now map to status codes with a safe message, with detail
+going to the logs, and a test asserts the leak does not happen.
+
 ## Roadmap
 
 | Phase | Focus | Status |
@@ -171,10 +228,10 @@ a version mismatch by default.
 | 0 | Packaging, linting, type checking, CI, pre-commit | ✅ Done |
 | 1 | Port `core` and `ingestion`, fixing the v1 defects | ✅ Done |
 | 2 | Port `analytics`: notebook logic extracted into importable modules, leakage guard, versioned model registry | ✅ Done |
-| 3 | Port `assistant`: model lifecycle, input limits, real confidence scoring | Next |
-| 4 | Production API: health checks, auth, rate limiting, metrics, tracing | Planned |
+| 3 | Port `assistant`: model lifecycle, input limits, real confidence, abstain path, HTTP API | ✅ Done |
+| 4 | API hardening: auth, rate limiting, metrics, distributed tracing | Next |
 | 5 | ML maturity: experiment tracking, model card, notebooks as narrative wrappers | Planned |
-| 6 | RAG quality and AI safety: retrieval evaluation, reranking, injection defenses | Planned |
+| 6 | RAG quality and AI safety: retrieval evaluation set, reranking, injection defenses | Planned |
 | 7 | Deployment: hardened image, dependency lockfile, secret management, monitoring | Planned |
 
 ### v1 defects addressed so far
@@ -192,10 +249,14 @@ a version mismatch by default.
 | Train-only preprocessing enforced by convention | Fixed — structural, via `Pipeline` composition |
 | Single model artifact, overwritten, with no provenance | Fixed — versioned registry with environment metadata |
 | ML logic trapped in notebooks, untestable | Fixed — importable modules, 191 tests |
-| Embedding model reloaded on every query | Pending (`assistant`) |
-| No input length limit on the API | Pending (`assistant`) |
-| Dead, unreachable retry path in LLM code | Pending (`assistant`) |
-| Hardcoded `confidence: 1.0` | Pending (`assistant`) |
+| Embedding model reloaded on every query (~5s) | Fixed — loaded once, 148ms per query |
+| No input length limit on an unauthenticated endpoint | Fixed — bounded at the schema, rejected with 422 |
+| Retry path that could never succeed, and was never tested | Fixed — prompt and parser agree; retry loop covered by tests |
+| Hardcoded `confidence: 1.0` | Fixed — cosine similarity, 0.509 vs 0.035 measured |
+| Answered confidently from irrelevant matches | Fixed — abstains below a relevance floor |
+| Stack traces returned to API callers | Fixed — safe messages, detail to logs |
+| Corpus edits silently never re-indexed | Fixed — upsert by stable id |
+| UTF-8 BOM leaking into served answers | Fixed — stripped at the source and on read |
 | Unpinned dependencies, container runs as root | Pending (Phase 7) |
 
 ## License
