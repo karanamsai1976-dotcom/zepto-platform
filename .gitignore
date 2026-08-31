@@ -1,0 +1,50 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# --- Virtual environments ---
+.venv/
+venv/
+
+# --- Testing and coverage ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# --- Tool caches ---
+.mypy_cache/
+.ruff_cache/
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- Secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Generated artifacts ---
+# Unlike the v1 capstone (where these were graded deliverables that had to be
+# committed), generated artifacts are rebuildable and do not belong in git.
+# Databases come from the pipeline, models from the registry, indexes from ingestion.
+*.db
+*.sqlite3
+*.joblib
+chroma_db/
+mlruns/
+data/raw/
+data/interim/
+data/processed/
+!data/samples/
+
+# --- OS and editors ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
