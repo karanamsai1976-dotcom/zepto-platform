@@ -55,6 +55,30 @@ class StorageError(ZeptoError):
     """Reading from or writing to a datastore failed."""
 
 
+# --- Analytics ---
+
+
+class AnalyticsError(ZeptoError):
+    """Base class for analytics and modelling failures."""
+
+
+class DatasetError(AnalyticsError):
+    """A dataset is missing, malformed, or violates its schema contract."""
+
+
+class LeakageError(AnalyticsError):
+    """A column that encodes the target reached the feature matrix.
+
+    Given its own type because target leakage is silent by nature: it does not
+    crash, it produces excellent metrics from a worthless model. Raising a
+    specific, unmissable error is the only reliable defence.
+    """
+
+
+class ModelArtifactError(AnalyticsError):
+    """A persisted model could not be saved, loaded, or trusted once loaded."""
+
+
 # --- Assistant ---
 
 
