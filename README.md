@@ -138,6 +138,25 @@ ZEPTO_ASSISTANT_MAX_QUERY_LENGTH=300
 ZEPTO_ASSISTANT_MOCK_LLM=false       # requires GROQ_API_KEY and `pip install groq`
 ```
 
+## Generating a model card
+
+```bash
+zepto-card
+```
+
+Writes `MODEL_CARD.md` beside the stored artifact, so the description stays
+attached to the thing it describes. The quantitative sections are computed from
+the model rather than written, because sections written by hand are the ones that
+end up flattering.
+
+Two of those computed sections carry the substance. **Disaggregated performance**
+slices at attribute *intersections*, not single attributes — on this model every
+single-attribute slice looks unremarkable, while the intersection shows it
+predicts death for every man in second and third class, with no discriminating
+ability whatsoever. **Comparison against a trivial baseline** asks how much the
+model adds over a lookup table of majority class per subgroup: on this data,
++2.8 accuracy points, agreeing with the lookup on 92.7% of rows.
+
 ## Evaluating retrieval quality
 
 ```bash
@@ -260,6 +279,19 @@ split.
 trace to the caller. Errors now map to status codes with a safe message, with detail
 going to the logs, and a test asserts the leak does not happen.
 
+**Models are reported against a trivial baseline, not just an accuracy number.** v1
+reported 80% accuracy and a deployment recommendation. It is a more useful and more
+honest summary to say that a lookup table on `sex` and `pclass` scores 77.65%, that
+the model scores 80.45%, and that the two agree on 92.7% of rows — so the model
+contributes about +2.8 points and most of the headline comes from two base rates.
+That comparison is computed automatically into every model card.
+
+**Fairness reporting slices at intersections.** Sliced one attribute at a time, this
+model looks unremarkable everywhere. Crossed, it predicts death for *every* man in
+second and third class — precision 0.000, recall 0.000, accuracy equal to the base
+rate. The first version of the card sliced single attributes and reported no problem,
+which is exactly how this class of harm normally goes unnoticed.
+
 ## Roadmap
 
 | Phase | Focus | Status |
@@ -269,8 +301,8 @@ going to the logs, and a test asserts the leak does not happen.
 | 2 | Port `analytics`: notebook logic extracted into importable modules, leakage guard, versioned model registry | ✅ Done |
 | 3 | Port `assistant`: model lifecycle, input limits, real confidence, abstain path, HTTP API | ✅ Done |
 | 4 | Retrieval evaluation: labelled set, hit rate, MRR, scope-decision scoring | ✅ Done |
-| 5 | API hardening: auth, rate limiting, metrics, distributed tracing | Next |
-| 6 | ML maturity: experiment tracking, model card, notebooks as narrative wrappers | Planned |
+| 5 | Model card: intersectional disaggregation, trivial-baseline comparison | ✅ Done |
+| 6 | API hardening: auth, rate limiting, metrics, distributed tracing | Next |
 | 7 | RAG quality: reranking, chunking strategy, prompt-injection defenses | Planned |
 | 8 | Deployment: hardened image, dependency lockfile, secret management, monitoring | Planned |
 
