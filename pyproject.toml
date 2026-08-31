@@ -55,6 +55,10 @@ all = [
     "zepto-platform[ingestion,analytics,assistant]",
 ]
 
+[project.scripts]
+zepto-ingest = "zepto.ingestion.pipeline:main"
+
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/zepto"]
 
