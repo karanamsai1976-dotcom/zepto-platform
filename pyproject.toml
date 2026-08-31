@@ -49,6 +49,7 @@ dev = [
     "mypy>=1.11",
     "pre-commit>=3.8",
     "types-requests",
+    "types-beautifulsoup4"
 ]
 all = [
     "zepto-platform[ingestion,analytics,assistant]",
@@ -111,6 +112,6 @@ branch = true
 
 [tool.coverage.report]
 show_missing = true
-# Starts at 0 because the package is still an empty scaffold. This gets
-# ratcheted upward as each module is ported -- see Phase 1.
-fail_under = 0
+# Ratcheted up as modules are ported. Never lower this to make a build pass --
+# add the missing test instead.
+fail_under = 90
