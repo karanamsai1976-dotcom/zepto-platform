@@ -45,6 +45,7 @@ assistant = [
     "chromadb>=0.5",
     "langgraph>=0.2",
     "tenacity>=9.0",
+    "prometheus-client>=0.20",
 ]
 notebooks = [
     "jupyterlab>=4.0",

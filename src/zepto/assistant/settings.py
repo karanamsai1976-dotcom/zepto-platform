@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class AssistantSettings(BaseSettings):
@@ -60,6 +61,50 @@ class AssistantSettings(BaseSettings):
         "arbitrarily large string went straight into the embedding model on an "
         "unauthenticated endpoint -- a trivial resource-exhaustion vector.",
     )
+
+    # --- Access control ---
+    require_api_key: bool = Field(
+        default=False,
+        description="Off by default so the demo runs without setup. When enabled "
+        "and no keys are configured, startup fails rather than silently serving "
+        "an endpoint that believes it is protected.",
+    )
+    # NoDecode stops pydantic-settings from JSON-decoding the raw environment
+    # value before validation. Without it, ZEPTO_ASSISTANT_API_KEYS="a,b" raises
+    # a SettingsError inside the source and the validator below never runs.
+    api_keys: Annotated[tuple[str, ...], NoDecode] = Field(
+        default=(),
+        description="Accepted API keys. Supply as a comma-separated environment "
+        "variable. Never logged; only a short fingerprint is.",
+    )
+
+    # --- Rate limiting ---
+    rate_limit_requests: int = Field(
+        default=60,
+        ge=1,
+        description="Requests permitted per client within the window.",
+    )
+    rate_limit_window_seconds: float = Field(
+        default=60.0,
+        gt=0,
+        description="Length of the fixed window, in seconds.",
+    )
+    rate_limit_enabled: bool = Field(default=True)
+
+    # --- Observability ---
+    metrics_enabled: bool = Field(
+        default=True,
+        description="Exposes Prometheus metrics at /metrics.",
+    )
+
+    @field_validator("api_keys", mode="before")
+    @classmethod
+    def _split_comma_separated(cls, value: object) -> object:
+        """Accept `a,b,c` as well as a JSON list, because a comma-separated
+        string is what a person actually types into an environment variable."""
+        if isinstance(value, str) and not value.strip().startswith("["):
+            return tuple(part.strip() for part in value.split(",") if part.strip())
+        return value
 
     # --- Optional real-LLM path ---
     llm_model: str = Field(default="llama-3.1-8b-instant")
