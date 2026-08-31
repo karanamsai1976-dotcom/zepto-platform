@@ -38,9 +38,13 @@ analytics = [
 assistant = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
+    # ChromaDB's default embedding function runs all-MiniLM-L6-v2 on ONNX
+    # Runtime, which it already bundles. Using sentence-transformers instead
+    # would pull PyTorch (~2GB) for the same model and the same 384-dimensional
+    # vectors, at roughly 34x the per-query cost as v1 used it.
     "chromadb>=0.5",
-    "sentence-transformers>=3.0",
     "langgraph>=0.2",
+    "tenacity>=9.0",
 ]
 dev = [
     "pytest>=8.0",

@@ -38,6 +38,7 @@ coverage.xml
 *.joblib
 models/
 chroma_db/
+data/chroma/
 mlruns/
 data/raw/
 data/interim/
