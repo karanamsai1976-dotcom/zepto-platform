@@ -91,6 +91,15 @@ class AssistantSettings(BaseSettings):
     )
     rate_limit_enabled: bool = Field(default=True)
 
+    # --- Bind address ---
+    host: str = Field(
+        default="127.0.0.1",
+        description="Loopback by default, so running the service locally does not "
+        "silently expose it to the network. A container sets 0.0.0.0, where the "
+        "network boundary is the container's rather than the process's.",
+    )
+    port: int = Field(default=8000, ge=1, le=65535)
+
     # --- Observability ---
     metrics_enabled: bool = Field(
         default=True,

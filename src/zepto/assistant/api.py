@@ -289,5 +289,7 @@ def main() -> None:
 
     settings = get_assistant_settings()
     configure_logging()
-    logger.info("starting_server", mock_llm=settings.mock_llm)
-    uvicorn.run("zepto.assistant.api:app", host="127.0.0.1", port=8000)
+    logger.info(
+        "starting_server", mock_llm=settings.mock_llm, host=settings.host, port=settings.port
+    )
+    uvicorn.run("zepto.assistant.api:app", host=settings.host, port=settings.port)

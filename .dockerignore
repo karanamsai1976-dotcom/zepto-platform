@@ -1,0 +1,19 @@
+# Everything the build does not need. This is a security control as much as a
+# speed one: whatever reaches the build context can end up in a layer, and a
+# layer is readable by anyone who can pull the image. .env and .git are the two
+# that matter -- v1's context included the whole working tree.
+
+# Deny by default, then re-admit exactly what the build uses.
+*
+
+!pyproject.toml
+!README.md
+!src/
+!data/corpus/
+!docker/requirements-assistant.lock
+
+# Re-exclude anything that could have slipped under the allowances above.
+**/__pycache__/
+**/*.py[cod]
+**/.env
+**/.env.*
