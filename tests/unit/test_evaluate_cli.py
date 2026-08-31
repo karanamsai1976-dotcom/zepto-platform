@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from zepto.assistant.evaluate_cli import format_retrieval, format_routing, main, run
-from zepto.assistant.evaluation import CaseOutcome, RetrievalReport, RoutingReport
+from zepto.assistant.evaluate_cli import format_retrieval, format_scope, main, run
+from zepto.assistant.evaluation import CaseOutcome, RetrievalReport, ScopeReport
 from zepto.assistant.settings import AssistantSettings
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -78,42 +78,70 @@ def test_retrieval_report_marks_a_document_that_never_appeared() -> None:
     assert "rank=absent" in format_retrieval(report)
 
 
-def test_routing_report_shows_both_recalls() -> None:
-    report = RoutingReport(
+def test_scope_report_shows_both_recalls() -> None:
+    report = ScopeReport(
         cases=34,
-        accuracy=0.176,
-        in_scope_recall=0.034,
+        accuracy=1.0,
+        in_scope_recall=1.0,
         out_of_scope_recall=1.0,
+        floor=0.13,
     )
 
-    rendered = format_routing(report)
+    rendered = format_scope(report)
 
-    assert "in-scope recall" in rendered
-    assert "3.4%" in rendered
-    assert "100.0%" in rendered
+    assert "in-scope answered" in rendered
+    assert "out-of-scope declined" in rendered
+    assert "0.13" in rendered
 
 
-def test_routing_report_lists_misrouted_cases() -> None:
-    report = RoutingReport(
+def test_scope_report_lists_wrongly_declined_cases() -> None:
+    """A real question that got no answer is the costliest failure, so it is
+    named rather than folded into a percentage."""
+    report = ScopeReport(
         cases=1,
         accuracy=0.0,
         in_scope_recall=0.0,
         out_of_scope_recall=0.0,
-        misrouted=[
+        floor=0.13,
+        wrongly_declined=[
             CaseOutcome(
                 query="How much does shipping cost?",
                 expected=("doc_01",),
-                retrieved=(),
-                rank=None,
-                routed_intent="general_question",
+                retrieved=("doc_01",),
+                rank=1,
+                routed_intent="declined",
             )
         ],
     )
 
-    rendered = format_routing(report)
+    rendered = format_scope(report)
 
+    assert "wrongly declined" in rendered
     assert "How much does shipping cost?" in rendered
-    assert "expected=policy" in rendered
+
+
+def test_scope_report_lists_wrongly_answered_cases() -> None:
+    report = ScopeReport(
+        cases=1,
+        accuracy=0.0,
+        in_scope_recall=0.0,
+        out_of_scope_recall=0.0,
+        floor=0.13,
+        wrongly_answered=[
+            CaseOutcome(
+                query="Who won the world cup?",
+                expected=(),
+                retrieved=("doc_06",),
+                rank=None,
+                routed_intent="answered",
+            )
+        ],
+    )
+
+    rendered = format_scope(report)
+
+    assert "wrongly answered" in rendered
+    assert "Who won the world cup?" in rendered
 
 
 def test_run_evaluates_the_committed_set_end_to_end(
@@ -125,8 +153,7 @@ def test_run_evaluates_the_committed_set_end_to_end(
 
     output = capsys.readouterr().out
     assert "Retrieval (in-scope cases only)" in output
-    assert "Routing (keyword classifier)" in output
-    assert "Abstention (out-of-scope cases)" in output
+    assert "Scope decision (relevance floor)" in output
 
 
 def test_console_entry_point_configures_logging_and_runs(

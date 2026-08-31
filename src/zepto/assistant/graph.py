@@ -1,18 +1,24 @@
-"""Question routing and answer generation, as an explicit state graph.
+"""Question answering as an explicit state graph.
 
-Three nodes: classify a question, answer it from retrieved policy text, or
-decline because it is not about policy. Routing is a keyword heuristic and never
-depends on the generation mode -- only what happens inside the answering nodes
-differs between mock and real-LLM operation.
+Two nodes and one decision: retrieve, then either answer from what came back or
+decline because the corpus does not cover the question.
 
-The addition over v1 is the abstain path. v1 answered from whatever came back,
-however poor the match, and reported full confidence while doing it. Retrieval
-always returns something: asking a vector index about football still yields the
-closest policy document. Answering from that is worse than saying the corpus
-does not cover the question, so a result below the relevance floor is declined.
+Routing is by retrieval relevance, not keywords. v1 classified intent by testing
+the question against eight substrings, and this rebuild carried that over
+unchanged until an evaluation set was built. Measured against 29 real customer
+questions, keyword routing had 3.4% recall: it sent 28 of them to "I can only
+answer questions about Zepto policies", because customers ask "How much does
+shipping cost?" rather than "What is the delivery fee?". The four queries used
+for manual checking had all happened to contain keywords, which is precisely how
+the defect survived.
 
-Mock answers quote the matched policy in full rather than truncating it at a
-fixed character count, which in v1 routinely cut sentences mid-word.
+Relevance separates the same questions cleanly. Across the evaluation set,
+in-scope questions score 0.186 to 0.567 and out-of-scope questions 0.000 to
+0.089, with no overlap. The floor sits between those bands.
+
+The cost is that every question now embeds before it can be declined, so an
+off-topic question takes roughly 150ms rather than returning instantly. That is
+a good trade for answering 29 questions instead of one.
 """
 
 from __future__ import annotations
@@ -33,18 +39,17 @@ class Retriever(Protocol):
     """The single operation the graph needs from a vector store.
 
     Declared structurally so tests can supply a stub with controlled relevance
-    scores, which is the only practical way to exercise the abstain path
+    scores, which is the only practical way to exercise the decline path
     deterministically.
     """
 
     def search(self, query: str, top_k: int | None = None) -> list[RetrievedChunk]: ...
 
 
-POLICY_INTENT = "policy_question"
-GENERAL_INTENT = "general_question"
+ANSWERED_INTENT = "policy_question"
+DECLINED_INTENT = "out_of_scope"
 
-GENERAL_ANSWER = "I can only answer questions about Zepto policies."
-ABSTAIN_ANSWER = (
+DECLINE_ANSWER = (
     "I could not find a Zepto policy that covers that. Please rephrase, or "
     "contact support directly if it is urgent."
 )
@@ -60,19 +65,12 @@ class GraphState(TypedDict, total=False):
     confidence: float
 
 
-def classify(query: str, keywords: tuple[str, ...]) -> str:
-    """Route by plain substring match, so 'cancellation' matches 'cancel'.
-
-    Deliberately not an LLM call: routing must behave identically whether or not
-    a language model is configured, and a keyword test is auditable in a way a
-    model's judgement is not.
-    """
-    lowered = query.lower()
-    return POLICY_INTENT if any(word in lowered for word in keywords) else GENERAL_INTENT
-
-
 def compose_policy_answer(chunks: list[RetrievedChunk]) -> str:
-    """Assemble a deterministic answer from the best matching policy text."""
+    """Assemble a deterministic answer from the best matching policy text.
+
+    Quotes the matched policy in full. v1 truncated at 200 characters, which
+    routinely cut sentences mid-word.
+    """
     best = chunks[0]
     return f"According to Zepto's policy: {best.text}"
 
@@ -84,55 +82,53 @@ def build_graph(
     """Build the compiled question-answering graph.
 
     The vector store is injected rather than constructed here, so tests can
-    supply one backed by a temporary index and the API can share a single
-    warm store across requests.
+    supply one backed by a temporary index and the API can share a single warm
+    store across requests.
     """
     resolved = settings or get_assistant_settings()
 
-    def classify_intent(state: GraphState) -> GraphState:
-        intent = classify(state["query"], resolved.policy_keywords)
-        logger.info("intent_classified", intent=intent, query_length=len(state["query"]))
-        return {"intent": intent}
-
-    def retrieve_and_answer(state: GraphState) -> GraphState:
+    def retrieve(state: GraphState) -> GraphState:
         chunks = store.search(state["query"])
+        best = chunks[0].relevance if chunks else 0.0
+        in_scope = bool(chunks) and best >= resolved.min_relevance
 
-        if not chunks or chunks[0].relevance < resolved.min_relevance:
-            best = chunks[0].relevance if chunks else 0.0
-            logger.info(
-                "abstained",
-                best_relevance=round(best, 4),
-                floor=resolved.min_relevance,
-            )
-            return {"chunks": [], "answer": ABSTAIN_ANSWER, "confidence": best}
+        logger.info(
+            "scope_decided",
+            in_scope=in_scope,
+            best_relevance=round(best, 4),
+            floor=resolved.min_relevance,
+            query_length=len(state["query"]),
+        )
+        return {
+            "chunks": chunks if in_scope else [],
+            "confidence": best,
+            "intent": ANSWERED_INTENT if in_scope else DECLINED_INTENT,
+        }
+
+    def answer(state: GraphState) -> GraphState:
+        chunks = state["chunks"]
 
         if resolved.mock_llm:
-            answer = compose_policy_answer(chunks)
-        else:
-            from zepto.assistant.llm import generate_grounded_answer
+            return {"answer": compose_policy_answer(chunks)}
 
-            answer = generate_grounded_answer(state["query"], chunks, settings=resolved)
+        from zepto.assistant.llm import generate_grounded_answer
 
-        return {"chunks": chunks, "answer": answer, "confidence": chunks[0].relevance}
+        return {"answer": generate_grounded_answer(state["query"], chunks, settings=resolved)}
 
-    def direct_answer(state: GraphState) -> GraphState:
-        return {"chunks": [], "answer": GENERAL_ANSWER, "confidence": 0.0}
+    def decline(state: GraphState) -> GraphState:
+        return {"answer": DECLINE_ANSWER}
 
-    def route(state: GraphState) -> Literal["retrieve_and_answer", "direct_answer"]:
-        return "retrieve_and_answer" if state["intent"] == POLICY_INTENT else "direct_answer"
+    def route(state: GraphState) -> Literal["answer", "decline"]:
+        return "answer" if state["intent"] == ANSWERED_INTENT else "decline"
 
     graph: StateGraph[GraphState, None, GraphState, GraphState] = StateGraph(GraphState)
-    graph.add_node("classify_intent", classify_intent)
-    graph.add_node("retrieve_and_answer", retrieve_and_answer)
-    graph.add_node("direct_answer", direct_answer)
+    graph.add_node("retrieve", retrieve)
+    graph.add_node("answer", answer)
+    graph.add_node("decline", decline)
 
-    graph.set_entry_point("classify_intent")
-    graph.add_conditional_edges(
-        "classify_intent",
-        route,
-        {"retrieve_and_answer": "retrieve_and_answer", "direct_answer": "direct_answer"},
-    )
-    graph.add_edge("retrieve_and_answer", END)
-    graph.add_edge("direct_answer", END)
+    graph.set_entry_point("retrieve")
+    graph.add_conditional_edges("retrieve", route, {"answer": "answer", "decline": "decline"})
+    graph.add_edge("answer", END)
+    graph.add_edge("decline", END)
 
     return graph.compile()

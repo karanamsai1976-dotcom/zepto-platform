@@ -10,10 +10,9 @@ from pathlib import Path
 
 from zepto.assistant.evaluation import (
     RetrievalReport,
-    RoutingReport,
-    evaluate_abstention,
+    ScopeReport,
     evaluate_retrieval,
-    evaluate_routing,
+    evaluate_scope,
     load_cases,
 )
 from zepto.assistant.retrieval import VectorStore, load_corpus
@@ -24,6 +23,7 @@ DEFAULT_CASES = Path("data/eval/retrieval_cases.jsonl")
 
 
 def format_retrieval(report: RetrievalReport) -> str:
+    """Render retrieval quality, listing anything not ranked first."""
     lines = [
         "Retrieval (in-scope cases only)",
         f"  cases                {report.cases}",
@@ -36,32 +36,35 @@ def format_retrieval(report: RetrievalReport) -> str:
         for failure in report.failures:
             position = failure.rank if failure.rank else "absent"
             lines.append(
-                f"    - {failure.query[:58]:<58} expected={'/'.join(failure.expected)} "
+                f"    - {failure.query[:56]:<56} expected={'/'.join(failure.expected)} "
                 f"got={'/'.join(failure.retrieved[:2])} rank={position}"
             )
     return "\n".join(lines)
 
 
-def format_routing(report: RoutingReport) -> str:
+def format_scope(report: ScopeReport) -> str:
+    """Render the scope decision, separating the two kinds of mistake."""
     lines = [
-        "Routing (keyword classifier)",
+        "Scope decision (relevance floor)",
         f"  cases                {report.cases}",
+        f"  floor                {report.floor}",
         f"  accuracy             {report.accuracy:.1%}",
-        f"  in-scope recall      {report.in_scope_recall:.1%}",
-        f"  out-of-scope recall  {report.out_of_scope_recall:.1%}",
+        f"  in-scope answered    {report.in_scope_recall:.1%}",
+        f"  out-of-scope declined {report.out_of_scope_recall:.1%}",
     ]
-    if report.misrouted:
-        lines.append(f"  misrouted            {len(report.misrouted)}")
-        for case in report.misrouted:
-            expected = "policy" if case.expected else "general"
-            lines.append(
-                f"    - {case.query[:58]:<58} expected={expected} got={case.routed_intent}"
-            )
+    if report.wrongly_declined:
+        lines.append(f"  wrongly declined     {len(report.wrongly_declined)}")
+        for case in report.wrongly_declined:
+            lines.append(f"    - {case.query[:70]}")
+    if report.wrongly_answered:
+        lines.append(f"  wrongly answered     {len(report.wrongly_answered)}")
+        for case in report.wrongly_answered:
+            lines.append(f"    - {case.query[:70]}")
     return "\n".join(lines)
 
 
 def run(settings: AssistantSettings | None = None, cases_path: Path | None = None) -> None:
-    """Evaluate retrieval, routing, and abstention, and print the results."""
+    """Evaluate retrieval and the scope decision, and print the results."""
     resolved = settings or get_assistant_settings()
     path = cases_path if cases_path is not None else DEFAULT_CASES
 
@@ -71,21 +74,12 @@ def run(settings: AssistantSettings | None = None, cases_path: Path | None = Non
         store.ingest(load_corpus(resolved.corpus_dir))
 
     retrieval = evaluate_retrieval(store, cases, k=resolved.top_k)
-    routing = evaluate_routing(cases, resolved.policy_keywords)
-    abstain_rate, leaked = evaluate_abstention(
-        store, cases, min_relevance=resolved.min_relevance, k=resolved.top_k
-    )
+    scope = evaluate_scope(store, cases, min_relevance=resolved.min_relevance, k=resolved.top_k)
 
     print(f"\nEvaluation set: {path} ({len(cases)} cases)\n")
     print(format_retrieval(retrieval))
     print()
-    print(format_routing(routing))
-    print()
-    print("Abstention (out-of-scope cases)")
-    print(f"  correctly declined   {abstain_rate:.1%}")
-    print(f"  relevance floor      {resolved.min_relevance}")
-    for case in leaked:
-        print(f"    - would have answered: {case.query[:60]}")
+    print(format_scope(scope))
     print()
 
 

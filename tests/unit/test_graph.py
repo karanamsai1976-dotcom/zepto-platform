@@ -1,22 +1,18 @@
-"""Tests for routing, answer composition, and the abstain path."""
+"""Tests for retrieval-based routing, answer composition, and the decline path."""
 
 from __future__ import annotations
 
 import pytest
 
 from zepto.assistant.graph import (
-    ABSTAIN_ANSWER,
-    GENERAL_ANSWER,
-    GENERAL_INTENT,
-    POLICY_INTENT,
+    ANSWERED_INTENT,
+    DECLINE_ANSWER,
+    DECLINED_INTENT,
     build_graph,
-    classify,
     compose_policy_answer,
 )
 from zepto.assistant.retrieval import RetrievedChunk
 from zepto.assistant.settings import AssistantSettings
-
-KEYWORDS = AssistantSettings().policy_keywords
 
 
 class StubRetriever:
@@ -32,7 +28,9 @@ class StubRetriever:
 
 
 def _chunk(
-    relevance: float, document_id: str = "doc_01", text: str = "Delivery is free over INR 149."
+    relevance: float,
+    document_id: str = "doc_01",
+    text: str = "Delivery is free over INR 149.",
 ) -> RetrievedChunk:
     return RetrievedChunk(
         document_id=document_id,
@@ -40,41 +38,6 @@ def _chunk(
         text=text,
         relevance=relevance,
     )
-
-
-# --- routing ---
-
-
-@pytest.mark.parametrize(
-    "query",
-    [
-        "What is the delivery fee?",
-        "How do I get a refund?",
-        "Can I cancel my order?",
-        "What is your cancellation policy?",
-        "Do you sell gift cards?",
-        "What are your support hours?",
-    ],
-)
-def test_policy_questions_route_to_retrieval(query: str) -> None:
-    assert classify(query, KEYWORDS) == POLICY_INTENT
-
-
-@pytest.mark.parametrize(
-    "query",
-    ["Who won the world cup?", "What is the capital of France?", "Tell me a joke"],
-)
-def test_unrelated_questions_route_to_the_direct_answer(query: str) -> None:
-    assert classify(query, KEYWORDS) == GENERAL_INTENT
-
-
-def test_matching_is_substring_based() -> None:
-    """'cancellation' must match the 'cancel' keyword."""
-    assert classify("What is your cancellation policy?", KEYWORDS) == POLICY_INTENT
-
-
-def test_matching_ignores_case() -> None:
-    assert classify("DELIVERY FEE?", KEYWORDS) == POLICY_INTENT
 
 
 # --- answer composition ---
@@ -89,90 +52,120 @@ def test_policy_answer_quotes_the_matched_text_in_full() -> None:
     assert not answer.endswith("...")
 
 
-# --- graph behaviour ---
+# --- routing by relevance ---
 
 
-def test_policy_question_is_answered_from_retrieved_text() -> None:
+def test_a_strong_match_is_answered_from_retrieved_text() -> None:
     retriever = StubRetriever([_chunk(0.55)])
     graph = build_graph(retriever, settings=AssistantSettings())
 
-    state = graph.invoke({"query": "What is the delivery fee?"})
+    state = graph.invoke({"query": "How much does shipping cost?"})
 
-    assert state["intent"] == POLICY_INTENT
+    assert state["intent"] == ANSWERED_INTENT
     assert "INR 149" in state["answer"]
     assert state["confidence"] == pytest.approx(0.55)
     assert state["chunks"][0].document_id == "doc_01"
 
 
-def test_unrelated_question_is_declined_without_retrieval() -> None:
-    retriever = StubRetriever([_chunk(0.9)])
+def test_a_question_without_keywords_is_still_answered() -> None:
+    """The defect this design replaced.
+
+    Keyword routing sent this to a refusal because it contains none of the eight
+    substrings it tested. Measured across 29 real questions, that classifier had
+    3.4% recall.
+    """
+    retriever = StubRetriever([_chunk(0.42)])
     graph = build_graph(retriever, settings=AssistantSettings())
+
+    state = graph.invoke({"query": "How much does shipping cost?"})
+
+    assert state["intent"] == ANSWERED_INTENT
+    assert state["answer"] != DECLINE_ANSWER
+
+
+def test_a_weak_match_is_declined() -> None:
+    """Retrieval always returns something -- asking a vector index about
+    football still yields the nearest policy document."""
+    retriever = StubRetriever([_chunk(0.05)])
+    graph = build_graph(retriever, settings=AssistantSettings(min_relevance=0.13))
 
     state = graph.invoke({"query": "Who won the world cup?"})
 
-    assert state["intent"] == GENERAL_INTENT
-    assert state["answer"] == GENERAL_ANSWER
-    assert state["chunks"] == []
-    assert state["confidence"] == 0.0
-    assert retriever.queries == []
-
-
-def test_weak_match_abstains_rather_than_answering() -> None:
-    """The behaviour v1 lacked entirely.
-
-    Retrieval always returns something -- asking a vector index about football
-    still yields the nearest policy document. v1 answered from it and reported
-    full confidence. Below the relevance floor, this declines instead.
-    """
-    retriever = StubRetriever([_chunk(0.05)])
-    graph = build_graph(retriever, settings=AssistantSettings(min_relevance=0.25))
-
-    state = graph.invoke({"query": "What is the delivery schedule on Mars?"})
-
-    assert state["intent"] == POLICY_INTENT
-    assert state["answer"] == ABSTAIN_ANSWER
+    assert state["intent"] == DECLINED_INTENT
+    assert state["answer"] == DECLINE_ANSWER
     assert state["chunks"] == []
     assert state["confidence"] == pytest.approx(0.05)
 
 
-def test_relevance_just_above_the_floor_is_answered() -> None:
-    retriever = StubRetriever([_chunk(0.26)])
-    graph = build_graph(retriever, settings=AssistantSettings(min_relevance=0.25))
+def test_relevance_exactly_at_the_floor_is_answered() -> None:
+    retriever = StubRetriever([_chunk(0.13)])
+    graph = build_graph(retriever, settings=AssistantSettings(min_relevance=0.13))
 
-    state = graph.invoke({"query": "What is the delivery fee?"})
-
-    assert state["answer"] != ABSTAIN_ANSWER
+    assert graph.invoke({"query": "anything"})["intent"] == ANSWERED_INTENT
 
 
-def test_empty_retrieval_abstains() -> None:
+def test_relevance_just_below_the_floor_is_declined() -> None:
+    retriever = StubRetriever([_chunk(0.129)])
+    graph = build_graph(retriever, settings=AssistantSettings(min_relevance=0.13))
+
+    assert graph.invoke({"query": "anything"})["intent"] == DECLINED_INTENT
+
+
+def test_empty_retrieval_is_declined() -> None:
     retriever = StubRetriever([])
     graph = build_graph(retriever, settings=AssistantSettings())
 
-    state = graph.invoke({"query": "What is the delivery fee?"})
+    state = graph.invoke({"query": "anything"})
 
-    assert state["answer"] == ABSTAIN_ANSWER
+    assert state["intent"] == DECLINED_INTENT
+    assert state["answer"] == DECLINE_ANSWER
     assert state["confidence"] == 0.0
+
+
+def test_the_floor_is_configurable() -> None:
+    """Raising the floor trades answered questions for stricter grounding."""
+    chunks = [_chunk(0.3)]
+
+    lenient = build_graph(StubRetriever(chunks), settings=AssistantSettings(min_relevance=0.13))
+    strict = build_graph(StubRetriever(chunks), settings=AssistantSettings(min_relevance=0.5))
+
+    assert lenient.invoke({"query": "q"})["intent"] == ANSWERED_INTENT
+    assert strict.invoke({"query": "q"})["intent"] == DECLINED_INTENT
+
+
+# --- confidence ---
 
 
 def test_confidence_reflects_the_best_match_not_a_constant() -> None:
     """v1 returned 1.0 for everything, which made the field actively misleading."""
     settings = AssistantSettings()
 
-    strong = build_graph(StubRetriever([_chunk(0.82)]), settings=settings).invoke(
-        {"query": "What is the delivery fee?"}
-    )
-    moderate = build_graph(StubRetriever([_chunk(0.41)]), settings=settings).invoke(
-        {"query": "What is the delivery fee?"}
-    )
+    strong = build_graph(StubRetriever([_chunk(0.82)]), settings=settings).invoke({"query": "q"})
+    moderate = build_graph(StubRetriever([_chunk(0.41)]), settings=settings).invoke({"query": "q"})
 
     assert strong["confidence"] == pytest.approx(0.82)
     assert moderate["confidence"] == pytest.approx(0.41)
     assert strong["confidence"] > moderate["confidence"]
 
 
+def test_confidence_is_reported_even_when_declining() -> None:
+    """Knowing how close a declined question came is useful for tuning."""
+    graph = build_graph(
+        StubRetriever([_chunk(0.09)]), settings=AssistantSettings(min_relevance=0.13)
+    )
+
+    state = graph.invoke({"query": "q"})
+
+    assert state["intent"] == DECLINED_INTENT
+    assert state["confidence"] == pytest.approx(0.09)
+
+
+# --- generation modes ---
+
+
 def test_real_llm_mode_delegates_generation_to_the_llm_module() -> None:
-    """With mock mode off, the answer must come from the language model path,
-    while retrieval and routing stay exactly the same."""
+    """With mock mode off, the answer comes from the language model path, while
+    retrieval and the scope decision stay exactly the same."""
     import zepto.assistant.llm as llm_module
 
     original = llm_module.generate_grounded_answer
@@ -183,25 +176,24 @@ def test_real_llm_mode_delegates_generation_to_the_llm_module() -> None:
         graph = build_graph(
             StubRetriever([_chunk(0.6)]), settings=AssistantSettings(mock_llm=False)
         )
-        state = graph.invoke({"query": "What is the delivery fee?"})
+        state = graph.invoke({"query": "How much does shipping cost?"})
     finally:
         llm_module.generate_grounded_answer = original
 
     assert state["answer"] == "answer from the model"
     assert state["confidence"] == pytest.approx(0.6)
-    assert state["chunks"][0].document_id == "doc_01"
 
 
-def test_routing_does_not_depend_on_generation_mode() -> None:
-    """Only generation differs between modes; routing must be identical."""
-    chunks = [_chunk(0.6)]
+def test_the_scope_decision_does_not_depend_on_generation_mode() -> None:
+    """Only generation differs between modes; the decision to answer must not."""
+    chunks = [_chunk(0.05)]
 
     mock_state = build_graph(
-        StubRetriever(chunks), settings=AssistantSettings(mock_llm=True)
-    ).invoke({"query": "Who won the world cup?"})
+        StubRetriever(chunks), settings=AssistantSettings(mock_llm=True, min_relevance=0.13)
+    ).invoke({"query": "q"})
 
     real_state = build_graph(
-        StubRetriever(chunks), settings=AssistantSettings(mock_llm=False)
-    ).invoke({"query": "Who won the world cup?"})
+        StubRetriever(chunks), settings=AssistantSettings(mock_llm=False, min_relevance=0.13)
+    ).invoke({"query": "q"})
 
-    assert mock_state["intent"] == real_state["intent"] == GENERAL_INTENT
+    assert mock_state["intent"] == real_state["intent"] == DECLINED_INTENT

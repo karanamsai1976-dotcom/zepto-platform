@@ -112,9 +112,22 @@ def test_unrelated_question_is_declined_and_cites_nothing(client: TestClient) ->
 
     payload = response.json()
     assert response.status_code == 200
-    assert payload["intent"] == "general_question"
+    assert payload["intent"] == "out_of_scope"
     assert payload["sources"] == []
-    assert payload["confidence"] == 0.0
+    assert payload["confidence"] < 0.13
+
+
+def test_a_question_without_any_keyword_is_still_answered(client: TestClient) -> None:
+    """The defect the evaluation set exposed.
+
+    Under keyword routing this reached a refusal, because it contains none of
+    the eight substrings that classifier tested. Real customers phrase questions
+    this way, and 28 of 29 labelled cases failed the same way.
+    """
+    payload = client.post("/ask", json={"query": "How much does shipping cost?"}).json()
+
+    assert payload["intent"] == "policy_question"
+    assert payload["sources"][0]["document_id"] == "doc_01"
 
 
 # --- input limits ---

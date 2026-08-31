@@ -40,12 +40,16 @@ class AssistantSettings(BaseSettings):
     # --- Retrieval ---
     top_k: int = Field(default=3, ge=1, le=20)
     min_relevance: float = Field(
-        default=0.25,
+        default=0.13,
         ge=0.0,
         le=1.0,
-        description="Below this relevance the assistant abstains rather than "
-        "answering from weakly related text. Answering confidently from a poor "
-        "match is worse than admitting the corpus does not cover the question.",
+        description="Below this relevance a question is treated as out of scope "
+        "and declined. This is also the routing decision: retrieval relevance "
+        "replaced the keyword classifier, which had 3.4% recall on real "
+        "questions. Calibrated against the 34-case evaluation set, where "
+        "in-scope questions score 0.186-0.567 and out-of-scope 0.000-0.089; the "
+        "floor sits mid-gap. Note this is fitted on the same small set it is "
+        "measured against -- as the set grows, recalibrate on a held-out split.",
     )
 
     # --- Input limits ---
@@ -55,22 +59,6 @@ class AssistantSettings(BaseSettings):
         description="Upper bound on an incoming question. v1 had none, so an "
         "arbitrarily large string went straight into the embedding model on an "
         "unauthenticated endpoint -- a trivial resource-exhaustion vector.",
-    )
-
-    # --- Routing ---
-    policy_keywords: tuple[str, ...] = Field(
-        default=(
-            "delivery",
-            "return",
-            "refund",
-            "membership",
-            "tracking",
-            "cancel",
-            "gift card",
-            "support hours",
-        ),
-        description="Substring matches that route a question to retrieval. Plain "
-        "substring matching, so 'cancellation' matches 'cancel'.",
     )
 
     # --- Optional real-LLM path ---

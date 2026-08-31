@@ -15,12 +15,16 @@ def test_mock_mode_is_the_default() -> None:
     assert settings.mock_llm is True
 
 
-def test_routing_keywords_cover_the_documented_set() -> None:
+def test_relevance_floor_sits_inside_the_measured_separation_gap() -> None:
+    """The floor is the routing decision, so its value is load bearing.
+
+    Measured on the 34-case evaluation set, in-scope questions score 0.186 and
+    above while out-of-scope questions reach at most 0.089. A default outside
+    that gap would either decline real questions or answer off-topic ones.
+    """
     settings = AssistantSettings()
 
-    assert "delivery" in settings.policy_keywords
-    assert "cancel" in settings.policy_keywords
-    assert "gift card" in settings.policy_keywords
+    assert 0.089 < settings.min_relevance < 0.186
 
 
 def test_input_limit_has_a_sane_default() -> None:

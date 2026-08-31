@@ -29,7 +29,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-from zepto.assistant.graph import GENERAL_INTENT, POLICY_INTENT, classify
 from zepto.assistant.retrieval import RetrievedChunk
 from zepto.core.errors import DatasetError
 from zepto.core.logging import get_logger
@@ -86,14 +85,22 @@ class RetrievalReport:
 
 
 @dataclass(frozen=True)
-class RoutingReport:
-    """How reliably the classifier separates in-scope from out-of-scope."""
+class ScopeReport:
+    """How reliably the relevance floor separates in-scope from out-of-scope.
+
+    Reported as two recalls rather than accuracy alone, because the error types
+    cost different things. Declining a real question means a customer gets no
+    answer at all. Answering an out-of-scope question produces a confident reply
+    built from unrelated policy text, which is worse than useless.
+    """
 
     cases: int
     accuracy: float
     in_scope_recall: float
     out_of_scope_recall: float
-    misrouted: list[CaseOutcome] = field(default_factory=list)
+    floor: float
+    wrongly_declined: list[CaseOutcome] = field(default_factory=list)
+    wrongly_answered: list[CaseOutcome] = field(default_factory=list)
 
 
 def load_cases(path: Path) -> list[EvalCase]:
@@ -179,87 +186,62 @@ def evaluate_retrieval(
     )
 
 
-def evaluate_routing(cases: list[EvalCase], keywords: tuple[str, ...]) -> RoutingReport:
-    """Score the intent classifier against the labelled scope of each case.
+def evaluate_scope(
+    store: Searcher,
+    cases: list[EvalCase],
+    min_relevance: float,
+    k: int = 3,
+) -> ScopeReport:
+    """Score the relevance floor as the scope decision.
 
-    Reported as two recalls rather than accuracy alone, because the two error
-    types cost different things: sending an in-scope question away means a
-    customer gets no answer at all, while sending an out-of-scope question to
-    retrieval is caught downstream by the relevance floor.
+    This replaced a keyword classifier, which scored 3.4% recall on real
+    customer questions because it only fired on eight exact substrings. The
+    floor is what decides whether a question is answered at all, so it is
+    measured on both sides: real questions that would be wrongly declined, and
+    off-topic questions that would be wrongly answered.
     """
-    misrouted: list[CaseOutcome] = []
+    wrongly_declined: list[CaseOutcome] = []
+    wrongly_answered: list[CaseOutcome] = []
     in_scope_correct = 0
     out_of_scope_correct = 0
     in_scope_total = 0
     out_of_scope_total = 0
 
     for case in cases:
-        intent = classify(case.query, keywords)
-        expected_intent = POLICY_INTENT if case.is_in_scope else GENERAL_INTENT
+        retrieved = store.search(case.query, top_k=k)
+        best = retrieved[0].relevance if retrieved else 0.0
+        answered = bool(retrieved) and best >= min_relevance
+
+        outcome = CaseOutcome(
+            query=case.query,
+            expected=case.expected,
+            retrieved=tuple(chunk.document_id for chunk in retrieved),
+            rank=rank_of_first_expected(retrieved, case.expected),
+            routed_intent="answered" if answered else "declined",
+        )
 
         if case.is_in_scope:
             in_scope_total += 1
-        else:
-            out_of_scope_total += 1
-
-        if intent == expected_intent:
-            if case.is_in_scope:
+            if answered:
                 in_scope_correct += 1
             else:
-                out_of_scope_correct += 1
+                wrongly_declined.append(outcome)
         else:
-            misrouted.append(
-                CaseOutcome(
-                    query=case.query,
-                    expected=case.expected,
-                    retrieved=(),
-                    rank=None,
-                    routed_intent=intent,
-                )
-            )
+            out_of_scope_total += 1
+            if answered:
+                wrongly_answered.append(outcome)
+            else:
+                out_of_scope_correct += 1
 
     total = len(cases)
-    return RoutingReport(
+    return ScopeReport(
         cases=total,
         accuracy=(in_scope_correct + out_of_scope_correct) / total if total else 0.0,
         in_scope_recall=in_scope_correct / in_scope_total if in_scope_total else 0.0,
         out_of_scope_recall=(
             out_of_scope_correct / out_of_scope_total if out_of_scope_total else 0.0
         ),
-        misrouted=misrouted,
+        floor=min_relevance,
+        wrongly_declined=wrongly_declined,
+        wrongly_answered=wrongly_answered,
     )
-
-
-def evaluate_abstention(
-    store: Searcher,
-    cases: list[EvalCase],
-    min_relevance: float,
-    k: int = 3,
-) -> tuple[float, list[CaseOutcome]]:
-    """Fraction of out-of-scope questions whose best match falls below the floor.
-
-    This measures whether the relevance floor is set somewhere useful. A floor
-    so low that nothing is ever declined provides no protection; one so high
-    that real questions are declined makes the assistant useless.
-    """
-    out_of_scope = [case for case in cases if not case.is_in_scope]
-    if not out_of_scope:
-        return 1.0, []
-
-    leaked: list[CaseOutcome] = []
-    for case in out_of_scope:
-        retrieved = store.search(case.query, top_k=k)
-        best = retrieved[0].relevance if retrieved else 0.0
-
-        if best >= min_relevance:
-            leaked.append(
-                CaseOutcome(
-                    query=case.query,
-                    expected=case.expected,
-                    retrieved=tuple(chunk.document_id for chunk in retrieved),
-                    rank=None,
-                    routed_intent="",
-                )
-            )
-
-    return (len(out_of_scope) - len(leaked)) / len(out_of_scope), leaked

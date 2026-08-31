@@ -13,14 +13,12 @@ import pytest
 
 from zepto.assistant.evaluation import (
     EvalCase,
-    evaluate_abstention,
     evaluate_retrieval,
-    evaluate_routing,
+    evaluate_scope,
     load_cases,
     rank_of_first_expected,
 )
 from zepto.assistant.retrieval import RetrievedChunk
-from zepto.assistant.settings import AssistantSettings
 from zepto.core.errors import DatasetError
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -167,71 +165,59 @@ def test_evaluating_with_no_in_scope_cases_is_refused() -> None:
         evaluate_retrieval(ScriptedSearcher({}), [EvalCase("a", ())], k=3)
 
 
-# --- routing metrics ---
+# --- scope decision ---
 
 
-def test_routing_reports_both_recalls_separately() -> None:
+def test_scope_reports_both_recalls_separately() -> None:
     """The two error types cost different things, so one accuracy number hides
     which one is happening."""
-    cases = [
-        EvalCase("What is the delivery fee?", ("doc_01",)),
-        EvalCase("How much does shipping cost?", ("doc_01",)),
-        EvalCase("Who won the world cup?", ()),
-    ]
-
-    report = evaluate_routing(cases, ("delivery",))
-
-    assert report.in_scope_recall == pytest.approx(0.5)
-    assert report.out_of_scope_recall == 1.0
-    assert len(report.misrouted) == 1
-    assert report.misrouted[0].query == "How much does shipping cost?"
-
-
-def test_routing_accuracy_is_over_all_cases() -> None:
-    cases = [EvalCase("delivery question", ("doc_01",)), EvalCase("unrelated", ())]
-
-    report = evaluate_routing(cases, ("delivery",))
-
-    assert report.accuracy == 1.0
-
-
-# --- abstention ---
-
-
-def test_out_of_scope_below_the_floor_counts_as_declined() -> None:
-    cases = [EvalCase("unrelated", ())]
-    searcher = ScriptedSearcher({"unrelated": [("doc_01", 0.05)]})
-
-    rate, leaked = evaluate_abstention(searcher, cases, min_relevance=0.25)
-
-    assert rate == 1.0
-    assert leaked == []
-
-
-def test_out_of_scope_above_the_floor_is_reported_as_a_leak() -> None:
-    """A floor set too low provides no protection, and this is how you find out."""
-    cases = [EvalCase("unrelated", ())]
-    searcher = ScriptedSearcher({"unrelated": [("doc_01", 0.8)]})
-
-    rate, leaked = evaluate_abstention(searcher, cases, min_relevance=0.25)
-
-    assert rate == 0.0
-    assert leaked[0].query == "unrelated"
-
-
-def test_abstention_is_vacuously_perfect_without_out_of_scope_cases() -> None:
-    rate, leaked = evaluate_abstention(
-        ScriptedSearcher({}), [EvalCase("a", ("doc_01",))], min_relevance=0.25
+    cases = [EvalCase("real question", ("doc_01",)), EvalCase("off topic", ())]
+    searcher = ScriptedSearcher(
+        {"real question": [("doc_01", 0.5)], "off topic": [("doc_03", 0.02)]}
     )
 
-    assert rate == 1.0
-    assert leaked == []
-
-
-def test_settings_supply_the_default_keywords() -> None:
-    report = evaluate_routing(
-        [EvalCase("What is the delivery fee?", ("doc_01",))],
-        AssistantSettings().policy_keywords,
-    )
+    report = evaluate_scope(searcher, cases, min_relevance=0.13)
 
     assert report.in_scope_recall == 1.0
+    assert report.out_of_scope_recall == 1.0
+    assert report.accuracy == 1.0
+    assert report.wrongly_declined == []
+    assert report.wrongly_answered == []
+
+
+def test_a_real_question_below_the_floor_is_reported_as_wrongly_declined() -> None:
+    """The failure mode that matters most: a customer gets no answer at all."""
+    cases = [EvalCase("real question", ("doc_01",))]
+    searcher = ScriptedSearcher({"real question": [("doc_01", 0.05)]})
+
+    report = evaluate_scope(searcher, cases, min_relevance=0.13)
+
+    assert report.in_scope_recall == 0.0
+    assert report.wrongly_declined[0].query == "real question"
+
+
+def test_an_off_topic_question_above_the_floor_is_reported_as_wrongly_answered() -> None:
+    """A floor set too low provides no protection, and this is how you find out."""
+    cases = [EvalCase("off topic", ())]
+    searcher = ScriptedSearcher({"off topic": [("doc_01", 0.8)]})
+
+    report = evaluate_scope(searcher, cases, min_relevance=0.13)
+
+    assert report.out_of_scope_recall == 0.0
+    assert report.wrongly_answered[0].query == "off topic"
+
+
+def test_empty_retrieval_is_treated_as_out_of_scope() -> None:
+    cases = [EvalCase("nothing indexed", ("doc_01",))]
+    searcher = ScriptedSearcher({})
+
+    report = evaluate_scope(searcher, cases, min_relevance=0.13)
+
+    assert report.in_scope_recall == 0.0
+
+
+def test_the_floor_is_recorded_in_the_report() -> None:
+    """A score is meaningless without the threshold that produced it."""
+    report = evaluate_scope(ScriptedSearcher({}), [EvalCase("q", ())], min_relevance=0.42)
+
+    assert report.floor == 0.42
