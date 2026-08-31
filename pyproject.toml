@@ -62,6 +62,7 @@ all = [
 [project.scripts]
 zepto-ingest = "zepto.ingestion.pipeline:main"
 zepto-train = "zepto.analytics.run:main"
+zepto-serve = "zepto.assistant.api:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/zepto"]
