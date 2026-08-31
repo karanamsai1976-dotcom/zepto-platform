@@ -83,6 +83,12 @@ class AnalyticsSettings(BaseSettings):
         description="Fixed so that runs are reproducible and comparable.",
     )
     cv_folds: int = Field(default=5, ge=2)
+    selection_metric: str = Field(
+        default="f1",
+        description="Metric used to choose the winning model. Explicit because "
+        "'which model is best' is a decision that should be recorded, not left "
+        "to whoever reads the comparison table.",
+    )
 
     # --- Artifacts ---
     model_dir: Path = Field(default=Path("models"))

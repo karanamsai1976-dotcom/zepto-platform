@@ -36,6 +36,7 @@ coverage.xml
 *.db
 *.sqlite3
 *.joblib
+models/
 chroma_db/
 mlruns/
 data/raw/
