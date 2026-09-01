@@ -272,3 +272,80 @@ def test_an_ordinary_question_does_not_trip_the_counter(tmp_path: Path) -> None:
         client.post("/ask", json=ASK)
 
         assert "zepto_suspected_injection_total 0.0" in client.get("/metrics").text
+
+
+# --- behind a proxy ---
+
+
+def test_without_a_declared_proxy_all_callers_share_a_bucket(tmp_path: Path) -> None:
+    """Default behaviour, stated as a test so the deployment consequence is
+    visible: behind an undeclared proxy every caller looks like one client."""
+    with configured_client(tmp_path / "c22", ZEPTO_ASSISTANT_RATE_LIMIT_REQUESTS="1") as client:
+        client.post("/ask", json=ASK, headers={"X-Forwarded-For": "1.1.1.1"})
+        second = client.post("/ask", json=ASK, headers={"X-Forwarded-For": "2.2.2.2"})
+
+        assert second.status_code == 429
+
+
+def test_with_one_declared_proxy_callers_are_limited_separately(tmp_path: Path) -> None:
+    with configured_client(
+        tmp_path / "c23",
+        ZEPTO_ASSISTANT_RATE_LIMIT_REQUESTS="1",
+        ZEPTO_ASSISTANT_TRUSTED_PROXY_COUNT="1",
+    ) as client:
+        first = client.post("/ask", json=ASK, headers={"X-Forwarded-For": "1.1.1.1"})
+        second = client.post("/ask", json=ASK, headers={"X-Forwarded-For": "2.2.2.2"})
+        third = client.post("/ask", json=ASK, headers={"X-Forwarded-For": "1.1.1.1"})
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert third.status_code == 429
+
+
+def test_a_forged_prefix_cannot_buy_a_fresh_quota(tmp_path: Path) -> None:
+    """The attack the counting exists to stop: prepending a different address
+    must not create a new bucket, because only the proxy's own entry is real."""
+    with configured_client(
+        tmp_path / "c24",
+        ZEPTO_ASSISTANT_RATE_LIMIT_REQUESTS="1",
+        ZEPTO_ASSISTANT_TRUSTED_PROXY_COUNT="1",
+    ) as client:
+        client.post("/ask", json=ASK, headers={"X-Forwarded-For": "9.9.9.9"})
+        second = client.post("/ask", json=ASK, headers={"X-Forwarded-For": "forged-a, 9.9.9.9"})
+
+        assert second.status_code == 429
+
+
+# --- landing page ---
+
+
+def test_the_root_path_serves_a_browser_page(tmp_path: Path) -> None:
+    """A deployed service whose root returns a JSON 404 reads as broken, and on
+    Spaces the root is what the iframe shows."""
+    with configured_client(tmp_path / "c25") as client:
+        response = client.get("/")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/html")
+        assert "Zepto Support Assistant" in response.text
+
+
+def test_the_landing_page_loads_nothing_from_a_third_party(tmp_path: Path) -> None:
+    """No CDN. A page that degrades when someone else's host is down is not
+    self-contained, and it adds a third party to a service built to have few."""
+    with configured_client(tmp_path / "c26") as client:
+        body = client.get("/").text
+
+        assert "http://" not in body
+        assert "https://" not in body
+
+
+def test_the_landing_page_is_reachable_without_a_key(tmp_path: Path) -> None:
+    """Gating static markup while /ask stays open protects nothing and makes the
+    deployment look broken."""
+    with configured_client(
+        tmp_path / "c27",
+        ZEPTO_ASSISTANT_REQUIRE_API_KEY="true",
+        ZEPTO_ASSISTANT_API_KEYS="secret-one",
+    ) as client:
+        assert client.get("/").status_code == 200

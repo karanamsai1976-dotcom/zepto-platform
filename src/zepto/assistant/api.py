@@ -38,7 +38,7 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI, Header, HTTPException, Request, Response, status
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from zepto.assistant.graph import build_graph
@@ -49,20 +49,23 @@ from zepto.assistant.schemas import AskRequest, AskResponse, HealthResponse, Sou
 from zepto.assistant.security import (
     ApiKeyVerifier,
     SlidingWindowRateLimiter,
+    client_address,
     client_identifier,
     fingerprint,
 )
 from zepto.assistant.settings import get_assistant_settings
+from zepto.assistant.web import LANDING_PAGE
 from zepto.core.errors import ZeptoError
 from zepto.core.logging import configure_logging, get_logger
 
 logger = get_logger(__name__)
 
 API_KEY_HEADER = "X-API-Key"
+FORWARDED_FOR_HEADER = "X-Forwarded-For"
 
 #: Paths that bypass authentication and rate limiting. Probes and scrapers hit
 #: these constantly, and gating them tends to result in nothing being monitored.
-UNGUARDED_PATHS = frozenset({"/health", "/ready", "/metrics"})
+UNGUARDED_PATHS = frozenset({"/", "/health", "/ready", "/metrics"})
 
 #: Requests between sweeps of idle rate-limit entries. Sweeping on every request
 #: is linear in tracked clients for no benefit; never sweeping leaks memory once
@@ -158,7 +161,11 @@ def create_app() -> FastAPI:
 
             client = client_identifier(
                 request.headers.get(API_KEY_HEADER),
-                request.client.host if request.client else None,
+                client_address(
+                    request.headers.get(FORWARDED_FOR_HEADER),
+                    request.client.host if request.client else None,
+                    settings.trusted_proxy_count,
+                ),
             )
             decision = limiter.check(client)
 
@@ -213,6 +220,16 @@ def create_app() -> FastAPI:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"detail": "Internal server error."},
         )
+
+    @app.get("/", include_in_schema=False)
+    async def landing() -> HTMLResponse:
+        """A browser page, so the root path is not a JSON 404.
+
+        Unguarded like the probe endpoints: it is static markup that performs no
+        retrieval, and gating the page while leaving /ask open would protect
+        nothing while making the deployment look broken.
+        """
+        return HTMLResponse(content=LANDING_PAGE)
 
     @app.get("/health", response_model=HealthResponse)
     async def health(request: Request) -> HealthResponse:

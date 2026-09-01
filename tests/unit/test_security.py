@@ -7,6 +7,7 @@ import pytest
 from zepto.assistant.security import (
     ApiKeyVerifier,
     SlidingWindowRateLimiter,
+    client_address,
     client_identifier,
     fingerprint,
 )
@@ -185,3 +186,59 @@ def test_address_is_used_when_no_key_is_presented() -> None:
 
 def test_an_unknown_address_still_yields_an_identifier() -> None:
     assert client_identifier(None, None) == "addr:unknown"
+
+
+# --- client address behind a proxy ---
+
+
+def test_forwarded_for_is_ignored_when_no_proxy_is_declared() -> None:
+    """The default. Trusting the header with nothing in front means any caller
+    can supply their own value, so every request looks like a new client and the
+    rate limit stops limiting anything at all."""
+    address = client_address("1.2.3.4", "10.0.0.1", trusted_proxy_count=0)
+
+    assert address == "10.0.0.1"
+
+
+def test_one_trusted_proxy_yields_the_real_client() -> None:
+    """The mirror failure: without this, every request behind a proxy arrives
+    from the proxy's address and all callers share a single quota."""
+    address = client_address("203.0.113.7", "10.0.0.1", trusted_proxy_count=1)
+
+    assert address == "203.0.113.7"
+
+
+def test_caller_supplied_entries_to_the_left_are_ignored() -> None:
+    """A caller can put anything at the front of the header. Only the entries
+    the trusted proxies appended themselves are believable."""
+    address = client_address("evil, 203.0.113.7", "10.0.0.1", trusted_proxy_count=1)
+
+    assert address == "203.0.113.7"
+
+
+def test_two_trusted_proxies_count_in_from_the_right() -> None:
+    address = client_address("203.0.113.7, 10.1.1.1", "10.0.0.1", trusted_proxy_count=2)
+
+    assert address == "203.0.113.7"
+
+
+def test_a_header_shorter_than_the_declared_chain_is_discarded() -> None:
+    """The request did not arrive the way the configuration says it does, so the
+    header is not evidence of anything. Falling back beats guessing."""
+    address = client_address("203.0.113.7", "10.0.0.1", trusted_proxy_count=2)
+
+    assert address == "10.0.0.1"
+
+
+def test_a_missing_header_falls_back_to_the_socket_address() -> None:
+    assert client_address(None, "10.0.0.1", trusted_proxy_count=1) == "10.0.0.1"
+
+
+def test_an_empty_header_falls_back_rather_than_returning_blank() -> None:
+    assert client_address("  ,  ", "10.0.0.1", trusted_proxy_count=1) == "10.0.0.1"
+
+
+def test_whitespace_around_entries_is_stripped() -> None:
+    address = client_address("  203.0.113.7  ,  10.1.1.1 ", "10.0.0.1", trusted_proxy_count=2)
+
+    assert address == "203.0.113.7"

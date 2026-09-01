@@ -50,3 +50,6 @@ data/processed/
 Thumbs.db
 .idea/
 .vscode/
+
+# --- Deployment build artifacts ---
+build/
