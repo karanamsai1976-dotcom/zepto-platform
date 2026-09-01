@@ -7,20 +7,30 @@ assistant served over HTTP.
 ## Status
 
 **All four modules are ported and verified end to end** — `core`, `ingestion`,
-`analytics`, and `assistant` — fully typed, covered by 342 tests at ~100% branch
-coverage, enforced in CI on every push.
+`analytics`, and `assistant` — fully typed, covered by 418 tests at ~100% branch
+coverage, enforced in CI on every push. The assistant also ships as a container
+image that CI builds, runs, queries, and vulnerability-scans on every change.
 
-Latest measured assistant quality, against a labelled 34-case evaluation set
-(`zepto-eval`):
+Latest measured assistant quality, against a labelled 77-case evaluation set
+(`zepto-eval`). The two splits are reported separately on purpose: `dev` is what
+the relevance floor was tuned against, and `test` was held back from every tuning
+decision, so only the second column estimates performance on questions nobody
+fitted to.
 
-| Metric | Score |
-| --- | --- |
-| Retrieval hit rate @1 | 86.2% |
-| Retrieval hit rate @3 | 96.6% |
-| Mean reciprocal rank | 0.914 |
-| Scope decision accuracy | 100% |
-| In-scope questions answered | 100% |
-| Out-of-scope questions declined | 100% |
+| Metric | dev (34) | test (43, held out) |
+| --- | --- | --- |
+| Retrieval hit rate @1 | 86.2% | 88.9% |
+| Retrieval hit rate @3 | 96.6% | 100% |
+| Mean reciprocal rank | 0.914 | 0.940 |
+| Scope decision accuracy | 100% | 97.7% |
+| In-scope questions answered | 100% | 100% |
+| Out-of-scope questions declined | 100% | **85.7%** |
+
+The last cell is the one worth reading. Retrieval generalises; the scope decision
+does not, quite. `"Convert 500 dollars to rupees"` clears the relevance floor
+because currency wording sits close to the delivery-fee document. It is left
+standing rather than fixed by moving the floor, since retuning on the split that
+caught it is exactly what the split exists to prevent.
 
 Latest verified ingestion run against the live source:
 
@@ -137,6 +147,41 @@ ZEPTO_ASSISTANT_MIN_RELEVANCE=0.20   # decline more readily
 ZEPTO_ASSISTANT_MAX_QUERY_LENGTH=300
 ZEPTO_ASSISTANT_MOCK_LLM=false       # requires GROQ_API_KEY and `pip install groq`
 ```
+
+### Hardening it for exposure
+
+Authentication and rate limiting are off and permissive by default, so the demo
+runs with no setup. Both fail closed when switched on — enabling authentication
+without configuring keys stops startup rather than serving an endpoint that
+believes it is protected.
+
+```bash
+ZEPTO_ASSISTANT_REQUIRE_API_KEY=true
+ZEPTO_ASSISTANT_API_KEYS=key-one,key-two   # sent as the X-API-Key header
+ZEPTO_ASSISTANT_RATE_LIMIT_REQUESTS=60     # per client, per window
+ZEPTO_ASSISTANT_RATE_LIMIT_WINDOW_SECONDS=60
+ZEPTO_ASSISTANT_HOST=0.0.0.0               # loopback by default
+```
+
+`/health`, `/ready`, and `/metrics` bypass both guards deliberately: probes hit
+them constantly, and a monitoring endpoint that needs a credential ends up
+unmonitored. `/metrics` serves Prometheus exposition labelled by matched route
+template rather than raw path, so unmatched URLs cannot inflate label
+cardinality.
+
+## Running it in Docker
+
+```bash
+docker build -f docker/Dockerfile -t zepto-assistant:0.1.0 .
+docker run -d -p 8000:8000 zepto-assistant:0.1.0
+```
+
+Base pinned by digest, dependencies from a lock generated inside the target
+container, build tooling discarded in a separate stage, runs as uid 10001, and
+the vector index plus embedding model baked at build time so a container starts
+without reaching the network. [`docker/README.md`](docker/README.md) records the
+measured behaviour and the known limitations, including 38 base-OS advisories
+with no upstream fix.
 
 ## Generating a model card
 
