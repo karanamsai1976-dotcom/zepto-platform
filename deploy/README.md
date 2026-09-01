@@ -1,10 +1,53 @@
-# Deploying to Hugging Face Spaces
+# Deploying
 
-The Space runs the same container image CI builds, runs, queries, and scans on
-every change — not a separate deployment build that could quietly diverge from
-what the tests cover.
+Two paths, because they answer different questions.
 
-## Why a generated tree
+| | Streamlit Community Cloud | Hugging Face Spaces (Docker) |
+| --- | --- | --- |
+| Cost | Free, no card | Requires HF PRO ($9/month) |
+| What is hosted | The Streamlit UI, importing the same package | The FastAPI service, as the container CI builds |
+| Use it for | A public link someone can click | Showing the real API and container |
+
+Docker Spaces moved behind PRO, so Community Cloud is the free route. It hosts
+the UI rather than the container -- which is why `streamlit_app.py` contains no
+retrieval logic of its own. Both front ends make the same decisions because both
+call the same `zepto.assistant` package, and a test asserts the UI defines
+nothing beyond its three presentation functions.
+
+## Streamlit Community Cloud
+
+Nothing to build or generate. Community Cloud installs from `requirements.txt`
+at the repository root and runs `streamlit_app.py`.
+
+1. Sign in at <https://share.streamlit.io> with GitHub and authorise it.
+2. **Create app** -> **Deploy a public app from GitHub**.
+3. Repository `karanamsai1976-dotcom/zepto-platform`, branch `main`, main file
+   `streamlit_app.py`.
+4. Under **Advanced settings**, set Python version to **3.12**. The lock was
+   resolved for 3.12, and a different interpreter would resolve around the pins.
+5. **Deploy**.
+
+The first build takes several minutes: roughly 100 pinned packages, then the
+~79MB ONNX embedding model downloaded on first use and the index built at
+startup. Both are cached for the life of the process by `st.cache_resource`.
+
+### What is not verified
+
+The app is verified locally through Streamlit's own headless harness, which runs
+the real script -- it starts, answers an in-scope question from the corpus,
+declines an out-of-scope one, and shows its sources. What has not been checked is
+the hosting: whether chromadb and onnxruntime install within Community Cloud's
+build limits, and what its shared CPU delivers per query. Measured locally, a
+warm query costs 0.7s at 2 vCPU, 2.0s at 1 vCPU, and 29s at 0.1 vCPU -- so the
+answer depends entirely on what they allocate, and that is a thing to find out by
+deploying rather than by guessing.
+
+Memory should be comfortable: the service peaks at 255MB under a 512MB cap,
+against Community Cloud's 1GB.
+
+## Hugging Face Spaces
+
+### Why a generated tree
 
 Spaces requires `Dockerfile` and a front-matter `README.md` at the repository
 root. This project keeps its Dockerfile in `docker/`, and its README is a project
@@ -18,7 +61,7 @@ generated Dockerfile is the repository's own copied verbatim with one clearly
 marked block appended. The difference between what is tested and what is deployed
 is exactly that block.
 
-## Build the tree
+### Build the tree
 
 ```bash
 python deploy/huggingface/build_space.py
@@ -26,7 +69,7 @@ python deploy/huggingface/build_space.py
 
 Writes `build/space/` — gitignored, since it is an artifact rather than source.
 
-## What the appended block sets, and why
+### What the appended block sets, and why
 
 | Setting | Value | Reason |
 | --- | --- | --- |
@@ -38,7 +81,7 @@ Authentication is left at its default of off. A public demo behind a credential
 nobody has is not a demo, and the exposure is bounded: the service reads a fixed
 corpus, writes nothing a caller can reach, and holds no user data.
 
-## Verified locally before pushing
+### Verified locally before pushing
 
 The generated tree was built and run as a container:
 
@@ -50,7 +93,7 @@ The generated tree was built and run as a container:
 | `X-Forwarded-For` handling | Accepted, request served |
 | Logs | JSON, one object per request with `request_id` |
 
-## Push it
+### Push it
 
 Create the Space first at <https://huggingface.co/new-space> — **SDK: Docker**,
 blank template. Then:
@@ -70,7 +113,7 @@ Authenticate with a **write** token from
 `--force` is correct here and not a shortcut: the tree is regenerated from
 scratch each time, so it has no shared history with what is already on the Space.
 
-## What to expect on the first build
+### What to expect on the first build
 
 Spaces builds the image itself, so the first deploy takes several minutes —
 about 100 dependencies plus the ~79MB ONNX embedding model, which is downloaded
@@ -85,7 +128,7 @@ Watch the **Logs** tab. A successful start ends with:
 `documents: 8` is the thing to check. Anything else means the index did not come
 through the build.
 
-## Not yet verified
+### Not yet verified
 
 The container is verified; the **hosting** is not, and will not be until it is
 actually deployed. Two things specifically:
