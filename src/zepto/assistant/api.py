@@ -44,6 +44,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from zepto.assistant.graph import build_graph
 from zepto.assistant.metrics import Metrics, route_label
 from zepto.assistant.retrieval import VectorStore, load_corpus
+from zepto.assistant.sanitization import looks_like_injection
 from zepto.assistant.schemas import AskRequest, AskResponse, HealthResponse, Source
 from zepto.assistant.security import (
     ApiKeyVerifier,
@@ -257,6 +258,14 @@ def create_app() -> FastAPI:
     async def ask(request: Request, payload: AskRequest) -> AskResponse:
         """Answer a question from the policy corpus."""
         require_api_key(request, request.headers.get(API_KEY_HEADER))
+
+        # Recorded, not refused. Pattern matching cannot decide whether text is
+        # an instruction, so blocking on it would turn a rephrasing away from a
+        # real customer while stopping nothing determined. What contains the
+        # risk is that the model has no tools -- see sanitization.py.
+        if looks_like_injection(payload.query):
+            request.app.state.metrics.suspected_injection.inc()
+            logger.warning("suspected_injection", query_length=len(payload.query))
 
         graph = request.app.state.graph
         state = graph.invoke({"query": payload.query})

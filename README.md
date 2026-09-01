@@ -326,9 +326,31 @@ which is exactly how this class of harm normally goes unnoticed.
 | 4 | Retrieval evaluation: labelled set, hit rate, MRR, scope-decision scoring | ✅ Done |
 | 5 | Model card: intersectional disaggregation, trivial-baseline comparison | ✅ Done |
 | 6 | Narrative notebook over tested modules, with a CI rot guard | ✅ Done |
-| 7 | API hardening: auth, rate limiting, metrics, distributed tracing | Next |
-| 8 | RAG quality: reranking, chunking strategy, prompt-injection defenses | Planned |
-| 9 | Deployment: hardened image, dependency lockfile, secret management, monitoring | Planned |
+| 7 | API hardening: auth, rate limiting, metrics | ✅ Done |
+| 8 | RAG quality: chunking and hybrid retrieval measured and rejected; held-out eval split; prompt-injection containment | ✅ Done |
+| 9 | Deployment: hardened image, dependency lockfile, image scanning in CI | ✅ Done |
+
+Phase 7 originally listed distributed tracing. What shipped is request-id
+correlation on every log line and an echoed response header, which is what a
+single service needs. Spans across service boundaries would be instrumenting a
+boundary that does not exist here, so the item was dropped rather than
+half-satisfied and ticked.
+
+Phase 8 was planned as reranking and a chunking strategy. Both were built and
+measured, both made retrieval worse than the whole-document baseline, and
+neither shipped — see `experiments/retrieval_ablation.py` for the table and
+`retrieval.py` for the reasoning. The phase is marked done because the question
+was answered, not because code was written.
+
+### Not done, and known
+
+| Gap | Why it is still open |
+| --- | --- |
+| Secret management is environment variables | Adequate for a single container; a real deployment wants a secret store with rotation and audit. |
+| The real-LLM path has never made a live call | Fully exercised against a stub client, including retry and reply validation, but no request has ever reached Groq. Tested, not proven. |
+| 38 unfixed base-OS advisories in the image | No upstream fix exists. A distroless base would clear most of them. Recorded in `docker/README.md`. |
+| Out-of-scope recall is 85.7% on held-out data | `"Convert 500 dollars to rupees"` clears the relevance floor. Deliberately not fixed by moving the floor, because retuning on the split that caught it is what the split exists to prevent. |
+| No public deployment | Runs locally and in Docker; nothing is hosted. |
 
 ### v1 defects addressed so far
 
