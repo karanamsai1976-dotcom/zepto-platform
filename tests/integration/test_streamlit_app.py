@@ -131,6 +131,21 @@ def test_an_example_button_fills_and_answers_the_question(
     assert "INR 25" in app.success[0].value
 
 
+def test_every_example_button_is_labelled_distinctly_by_topic(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Deriving labels from the questions produced "How", "Can", "How", "Do",
+    "Who" -- two identical and none naming a topic. A button has to say what
+    pressing it does, and that is worth a test because the defect is invisible
+    in the source and obvious on screen."""
+    app = run_app(tmp_path, monkeypatch)
+
+    labels = [button.label for button in app.button]
+
+    assert labels == ["Delivery", "Returns", "Tracking", "Support", "Off-topic"]
+    assert len(set(labels)) == len(labels)
+
+
 def test_a_blank_question_renders_nothing_rather_than_failing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
