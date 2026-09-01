@@ -4,14 +4,14 @@
 # was actually built and tested, so an image rebuilt in six months is the same
 # image and not whatever the resolver picks that day.
 #
-# Platform: linux/amd64, CPython 3.12. It is generated inside the target
+# Platform: linux/amd64, CPython 3.12, Debian trixie. It is generated inside the target
 # container, not on a developer machine -- a Windows freeze of the same extra
 # differs (it carries colorama and lacks uvloop), and shipping that would pin
 # packages the image cannot use while omitting one it does.
 #
 # Regenerate after changing the `assistant` extra:
 #
-#   docker run --rm -v "$PWD:/src:ro" python:3.12-slim-bookworm sh -c \
+#   docker run --rm -v "$PWD:/src:ro" python:3.12-slim-trixie sh -c \
 #     'set -e; mkdir -p /tmp/pkg && cp /src/pyproject.toml /src/README.md /tmp/pkg/ \
 #      && cp -r /src/src /tmp/pkg/src && python -m venv /v \
 #      && /v/bin/pip install -q --upgrade pip && /v/bin/pip install -q "/tmp/pkg[assistant]" \

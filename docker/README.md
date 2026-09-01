@@ -86,19 +86,63 @@ starts, reports healthy, and serves an endpoint it believes is protected.
 CI builds the image, runs it, checks it answers, then scans it with Trivy and
 fails on **fixable** HIGH/CRITICAL findings.
 
-Measured locally on `0.1.0` (Trivy, `--severity HIGH,CRITICAL`):
+Measured locally (Trivy, `--severity HIGH,CRITICAL`):
 
-- **Fixable: 0.** This is what CI gates on.
-- **Unfixed: 38** (31 HIGH, 7 CRITICAL), all in Debian bookworm base packages —
-  `bsdutils`, `libblkid1`, `libmount1`, `libsqlite3-0`, `gzip`, `libacl1`,
-  `libncursesw6` and similar — marked `affected` or `fix_deferred` upstream.
+| Base | Total | Fixable |
+| --- | --- | --- |
+| Debian bookworm (previous) | 38 | 0 |
+| Debian trixie (current) | **20** | 0 |
 
-CI does not fail on the second group, deliberately. No change in this repository
-can clear an advisory with no upstream fix, so gating on them produces a
-permanently red build, and a permanently red build trains people to stop reading
-it. They are recorded here instead and should be rechecked whenever the base
-digest is bumped. If this were internet-facing rather than a demo, the next step
-would be a distroless or Chainguard base, which carries far fewer of them.
+Moving to trixie removed 18 advisories and cost nothing measurable: the image is
+the same 1.17GB, the container is healthy on the same `/ready` probe, and it
+returns the same answers.
+
+The dependency set is unchanged, and that was checked rather than assumed —
+resolving `.[assistant]` inside both bases on the same day produces byte-identical
+output, all 99 packages at the same versions. A fresh resolution did differ from
+the *committed* lock in two patch versions (`filelock`, `protobuf`), but that is
+time passing, not the base changing, which is why the committed lock was left
+alone. A base swap and a dependency bump are two changes and belong in two
+commits.
+
+CI gates on **fixable** findings only. No change in this repository can clear an
+advisory with no upstream fix, so gating on those produces a permanently red
+build, and a permanently red build trains people to stop reading it. A second,
+non-blocking step prints the unfixed ones on every run, because "we ignore
+unfixed" becomes "we never look" without something that puts them in front of
+you.
+
+### The four that are not the base OS
+
+Sixteen of the twenty are Debian packages — `perl-base`, `libsqlite3-0`,
+`ncurses`, `gzip`, `libacl1`. The other four are **chromadb 1.5.9 itself**, and
+they deserve to be read rather than skimmed:
+
+| CVE | Severity | Title |
+| --- | --- | --- |
+| CVE-2026-45829 | CRITICAL | Arbitrary code execution via pre-authentication code injection |
+| CVE-2026-45833 | CRITICAL | Arbitrary code execution via code injection |
+| CVE-2026-45830 | HIGH | Unauthorized data manipulation due to improper authorization validation |
+| CVE-2026-45831 | HIGH | Unauthorized cross-tenant actions due to improper authorization checks |
+
+1.5.9 is the latest release on PyPI, so there is no version to upgrade to. What
+reduces the exposure here is how chromadb is used, and that is verifiable rather
+than asserted:
+
+- It runs as an **embedded library** via `PersistentClient`, not as a server.
+  Two of the four advisories describe authorization and cross-tenant checks,
+  which are server-mode concepts this deployment does not use.
+- The container has exactly **one listening socket**, confirmed by reading
+  `/proc/net/tcp` inside a running container: port 8000, the FastAPI app. There
+  is no chroma endpoint reachable by anyone.
+- Nothing untrusted reaches chromadb's control surface. Queries arrive as text
+  through a validated Pydantic model and are used as query text only.
+
+That is a reduction in exposure, not a fix, and the pre-authentication code
+injection advisory is not one to be relaxed about. The action is to watch for a
+patched release and upgrade on the day it lands. If this were internet-facing
+and holding real data, the honest answer would be to reconsider the dependency
+rather than reason around it.
 
 ## Known limitations
 
@@ -117,7 +161,7 @@ for `/app/data/chroma`.
 After changing the `assistant` extra in `pyproject.toml`:
 
 ```bash
-docker run --rm -v "$PWD:/src:ro" python:3.12-slim-bookworm sh -c \
+docker run --rm -v "$PWD:/src:ro" python:3.12-slim-trixie sh -c \
   'set -e; mkdir -p /tmp/pkg && cp /src/pyproject.toml /src/README.md /tmp/pkg/ \
    && cp -r /src/src /tmp/pkg/src && python -m venv /v \
    && /v/bin/pip install -q --upgrade pip && /v/bin/pip install -q "/tmp/pkg[assistant]" \

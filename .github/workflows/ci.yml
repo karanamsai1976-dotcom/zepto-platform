@@ -118,3 +118,18 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
           format: table
+
+      # The unfixed ones are not gated on, but they must not be invisible
+      # either: this image carries two CRITICAL advisories in chromadb itself,
+      # not merely in the base OS, and "we ignore unfixed" quietly becomes "we
+      # never look" without a step that prints them on every run.
+      - name: Report advisories with no fix available (informational)
+        if: always()
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: zepto-assistant:ci
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: "0"
+          format: table

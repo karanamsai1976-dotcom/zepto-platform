@@ -393,7 +393,8 @@ was answered, not because code was written.
 | --- | --- |
 | Secret management is environment variables | Adequate for a single container; a real deployment wants a secret store with rotation and audit. |
 | The real-LLM path has never made a live call | Fully exercised against a stub client, including retry and reply validation, but no request has ever reached Groq. Tested, not proven. |
-| 38 unfixed base-OS advisories in the image | No upstream fix exists. A distroless base would clear most of them. Recorded in `docker/README.md`. |
+| 4 unfixed CVEs in chromadb 1.5.9, two of them CRITICAL | 1.5.9 is the newest release; there is nothing to upgrade to. Exposure is reduced by how it is used — embedded `PersistentClient`, no chroma server, one listening socket in the container (verified via `/proc/net/tcp`) — but reduced is not fixed. `docker/README.md` has the detail. |
+| 16 unfixed Debian advisories in the image | No upstream fix exists. Down from 26 after moving the base to trixie. |
 | Out-of-scope recall is 85.7% on held-out data | `"Convert 500 dollars to rupees"` clears the relevance floor. Deliberately not fixed by moving the floor, because retuning on the split that caught it is what the split exists to prevent. |
 | No public deployment | Runs locally and in Docker; nothing is hosted. |
 
