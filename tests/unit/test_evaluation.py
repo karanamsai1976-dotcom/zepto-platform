@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 
 from zepto.assistant.evaluation import (
+    DEV_SPLIT,
+    TEST_SPLIT,
     EvalCase,
     evaluate_retrieval,
     evaluate_scope,
@@ -221,3 +223,55 @@ def test_the_floor_is_recorded_in_the_report() -> None:
     report = evaluate_scope(ScriptedSearcher({}), [EvalCase("q", ())], min_relevance=0.42)
 
     assert report.floor == 0.42
+
+
+# --- splits ---
+
+
+def test_the_committed_set_carries_both_splits() -> None:
+    """A held-out split only means anything if it is actually there."""
+    cases = load_cases(CASES_PATH)
+
+    assert {case.split for case in cases} == {DEV_SPLIT, TEST_SPLIT}
+    assert len(load_cases(CASES_PATH, split=TEST_SPLIT)) >= 20
+
+
+def test_both_splits_contain_in_scope_and_out_of_scope_cases() -> None:
+    """A split with no negatives cannot measure the abstention decision at all,
+    and a test split that cannot measure it is not a check on anything."""
+    for split in (DEV_SPLIT, TEST_SPLIT):
+        subset = load_cases(CASES_PATH, split=split)
+
+        assert any(case.is_in_scope for case in subset), split
+        assert any(not case.is_in_scope for case in subset), split
+
+
+def test_selecting_a_split_returns_only_that_split(tmp_path: Path) -> None:
+    path = tmp_path / "cases.jsonl"
+    path.write_text(
+        '{"query": "a", "expected": ["doc_01"], "split": "dev"}\n'
+        '{"query": "b", "expected": ["doc_01"], "split": "test"}\n',
+        encoding="utf-8",
+    )
+
+    assert [case.query for case in load_cases(path, split=TEST_SPLIT)] == ["b"]
+
+
+def test_a_case_without_a_split_is_treated_as_dev(tmp_path: Path) -> None:
+    """A case file predating the field defaults to dev, which keeps unlabelled
+    cases out of the held-out number rather than silently inflating it."""
+    path = tmp_path / "cases.jsonl"
+    path.write_text('{"query": "a", "expected": ["doc_01"]}\n', encoding="utf-8")
+
+    assert load_cases(path)[0].split == DEV_SPLIT
+
+
+def test_an_unknown_split_is_refused(tmp_path: Path) -> None:
+    """Silently returning nothing would report perfect scores on zero cases."""
+    path = tmp_path / "cases.jsonl"
+    path.write_text('{"query": "a", "expected": [], "split": "dev"}\n', encoding="utf-8")
+
+    with pytest.raises(DatasetError) as exc_info:
+        load_cases(path, split="nonexistent")
+
+    assert exc_info.value.context["split"] == "nonexistent"

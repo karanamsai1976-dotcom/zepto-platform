@@ -35,6 +35,13 @@ from zepto.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+#: Cases used to choose thresholds and compare designs.
+DEV_SPLIT = "dev"
+#: Cases held back from every tuning decision, so a reported score is an
+#: estimate of unseen performance rather than a description of the fitting. The
+#: relevance floor and the retrieval design were both chosen against dev alone.
+TEST_SPLIT = "test"
+
 
 class Searcher(Protocol):
     """The retrieval operation an evaluation needs."""
@@ -55,6 +62,7 @@ class EvalCase:
 
     query: str
     expected: tuple[str, ...]
+    split: str = DEV_SPLIT
 
     @property
     def is_in_scope(self) -> bool:
@@ -103,8 +111,8 @@ class ScopeReport:
     wrongly_answered: list[CaseOutcome] = field(default_factory=list)
 
 
-def load_cases(path: Path) -> list[EvalCase]:
-    """Read labelled cases from a JSON Lines file."""
+def load_cases(path: Path, split: str | None = None) -> list[EvalCase]:
+    """Read labelled cases from a JSON Lines file, optionally one split only."""
     if not path.exists():
         raise DatasetError("evaluation set not found", path=str(path))
 
@@ -114,12 +122,23 @@ def load_cases(path: Path) -> list[EvalCase]:
             continue
         try:
             payload = json.loads(line)
-            cases.append(EvalCase(query=payload["query"], expected=tuple(payload["expected"])))
+            cases.append(
+                EvalCase(
+                    query=payload["query"],
+                    expected=tuple(payload["expected"]),
+                    split=payload.get("split", DEV_SPLIT),
+                )
+            )
         except (json.JSONDecodeError, KeyError, TypeError) as exc:
             raise DatasetError("malformed evaluation case", path=str(path), line=number) from exc
 
     if not cases:
         raise DatasetError("evaluation set is empty", path=str(path))
+
+    if split is not None:
+        cases = [case for case in cases if case.split == split]
+        if not cases:
+            raise DatasetError("evaluation split is empty", path=str(path), split=split)
 
     return cases
 

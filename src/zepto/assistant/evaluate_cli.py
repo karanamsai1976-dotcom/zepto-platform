@@ -9,6 +9,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from zepto.assistant.evaluation import (
+    DEV_SPLIT,
+    TEST_SPLIT,
+    EvalCase,
     RetrievalReport,
     ScopeReport,
     evaluate_retrieval,
@@ -64,7 +67,14 @@ def format_scope(report: ScopeReport) -> str:
 
 
 def run(settings: AssistantSettings | None = None, cases_path: Path | None = None) -> None:
-    """Evaluate retrieval and the scope decision, and print the results."""
+    """Evaluate retrieval and the scope decision, and print the results.
+
+    Reported per split. dev is what thresholds and design choices were chosen
+    against; test was held back from all of them, so it is the only number that
+    estimates performance on questions nobody tuned for. Reporting only the
+    combined figure would hide the difference, which is the one thing worth
+    knowing.
+    """
     resolved = settings or get_assistant_settings()
     path = cases_path if cases_path is not None else DEFAULT_CASES
 
@@ -73,14 +83,26 @@ def run(settings: AssistantSettings | None = None, cases_path: Path | None = Non
     if store.count() == 0:
         store.ingest(load_corpus(resolved.corpus_dir))
 
-    retrieval = evaluate_retrieval(store, cases, k=resolved.top_k)
-    scope = evaluate_scope(store, cases, min_relevance=resolved.min_relevance, k=resolved.top_k)
+    print(f"\nEvaluation set: {path} ({len(cases)} cases)")
 
-    print(f"\nEvaluation set: {path} ({len(cases)} cases)\n")
+    rule = "=" * 62
+    for split in (DEV_SPLIT, TEST_SPLIT):
+        subset = [case for case in cases if case.split == split]
+        if not subset:
+            continue
+        print(f"\n{rule}\n{split.upper()} split ({len(subset)} cases)\n{rule}\n")
+        report_split(store, subset, resolved)
+    print()
+
+
+def report_split(store: VectorStore, cases: list[EvalCase], settings: AssistantSettings) -> None:
+    """Print both reports for one subset of cases."""
+    retrieval = evaluate_retrieval(store, cases, k=settings.top_k)
+    scope = evaluate_scope(store, cases, min_relevance=settings.min_relevance, k=settings.top_k)
+
     print(format_retrieval(retrieval))
     print()
     print(format_scope(scope))
-    print()
 
 
 def main() -> None:
