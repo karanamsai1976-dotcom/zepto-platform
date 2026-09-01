@@ -183,6 +183,13 @@ without reaching the network. [`docker/README.md`](docker/README.md) records the
 measured behaviour and the known limitations, including 38 base-OS advisories
 with no upstream fix.
 
+## Live demo
+
+**<https://zepto-platform-oj3srsmpcuiakndnabzce7.streamlit.app>**
+
+Hosted on Streamlit Community Cloud. It sleeps after 12 idle hours, so the first
+request after a quiet spell pays a container start.
+
 ## Deploying
 
 Two front ends, one package. [`streamlit_app.py`](streamlit_app.py) is a
