@@ -154,6 +154,29 @@ def test_run_evaluates_the_committed_set_end_to_end(
     output = capsys.readouterr().out
     assert "Retrieval (in-scope cases only)" in output
     assert "Scope decision (relevance floor)" in output
+    # Both splits reported separately: a single combined figure would let a
+    # score tuned on dev pass itself off as held-out performance.
+    assert "DEV split" in output
+    assert "TEST split" in output
+
+
+def test_a_set_with_only_one_split_reports_only_that_split(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An absent split must be omitted, not reported as a run over zero cases."""
+    cases = tmp_path / "cases.jsonl"
+    cases.write_text(
+        '{"query": "How much is delivery?", "expected": ["doc_01"], "split": "dev"}\n'
+        '{"query": "Tell me a joke", "expected": [], "split": "dev"}\n',
+        encoding="utf-8",
+    )
+    settings = AssistantSettings(corpus_dir=CORPUS_DIR, chroma_dir=tmp_path / "chroma")
+
+    run(settings=settings, cases_path=cases)
+
+    output = capsys.readouterr().out
+    assert "DEV split" in output
+    assert "TEST split" not in output
 
 
 def test_console_entry_point_configures_logging_and_runs(

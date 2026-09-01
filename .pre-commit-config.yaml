@@ -25,7 +25,9 @@ repos:
     hooks:
       - id: mypy
         name: mypy
-        entry: mypy
+        # `python -m mypy` rather than a bare `mypy`: the console script is a
+        # separate shim that can be missing even when the package is installed.
+        entry: python -m mypy
         language: system
         types: [python]
         pass_filenames: false

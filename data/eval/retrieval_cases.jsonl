@@ -1,34 +1,77 @@
-{"query": "How much does shipping cost?", "expected": ["doc_01"]}
-{"query": "Do I pay extra if my basket is small?", "expected": ["doc_01"]}
-{"query": "How fast will my groceries arrive?", "expected": ["doc_01"]}
-{"query": "Can I pay to get my order sooner?", "expected": ["doc_01"]}
-{"query": "Do you deliver outside the city?", "expected": ["doc_01"]}
-{"query": "How long do I have to send something back?", "expected": ["doc_02"]}
-{"query": "When will my money come back to me?", "expected": ["doc_02"]}
-{"query": "Can I return shampoo I already opened?", "expected": ["doc_02"]}
-{"query": "Do I have to pay to send an item back?", "expected": ["doc_02"]}
-{"query": "What do I get if I subscribe monthly?", "expected": ["doc_03"]}
-{"query": "How much is the premium plan?", "expected": ["doc_03"]}
-{"query": "If I stop my subscription halfway through the month, do I get money back?", "expected": ["doc_03"]}
-{"query": "Is there a plan that gives me early access to deals?", "expected": ["doc_03"]}
-{"query": "How can I see where my rider is?", "expected": ["doc_04"]}
-{"query": "My order has not moved in half an hour, what should I do?", "expected": ["doc_04"]}
-{"query": "Does the arrival time update by itself?", "expected": ["doc_04"]}
-{"query": "Can I stop an order after placing it?", "expected": ["doc_05"]}
-{"query": "Why can I no longer call off my order?", "expected": ["doc_05"]}
-{"query": "What happens if no rider is available?", "expected": ["doc_05"]}
-{"query": "Something was missing from my bag, what now?", "expected": ["doc_06", "doc_02"]}
-{"query": "Do I need to send a photo if my order was expensive?", "expected": ["doc_06"]}
-{"query": "An item arrived crushed, do I have to send it back?", "expected": ["doc_06", "doc_02"]}
-{"query": "What amounts can I buy a voucher for?", "expected": ["doc_07"]}
-{"query": "How long before a voucher expires?", "expected": ["doc_07"]}
-{"query": "Can I use two vouchers at once?", "expected": ["doc_07"]}
-{"query": "Can I turn my voucher into cash?", "expected": ["doc_07"]}
-{"query": "When can I talk to someone?", "expected": ["doc_08"]}
-{"query": "How quickly do you reply to emails?", "expected": ["doc_08"]}
-{"query": "Is there a number I can ring?", "expected": ["doc_08"]}
-{"query": "Who won the world cup?", "expected": []}
-{"query": "What is the capital of France?", "expected": []}
-{"query": "How do I bake sourdough bread?", "expected": []}
-{"query": "What is the weather tomorrow?", "expected": []}
-{"query": "Recommend a good film to watch tonight", "expected": []}
+{"query": "How much does shipping cost?", "expected": ["doc_01"], "split": "dev"}
+{"query": "Do I pay extra if my basket is small?", "expected": ["doc_01"], "split": "dev"}
+{"query": "How fast will my groceries arrive?", "expected": ["doc_01"], "split": "dev"}
+{"query": "Can I pay to get my order sooner?", "expected": ["doc_01"], "split": "dev"}
+{"query": "Do you deliver outside the city?", "expected": ["doc_01"], "split": "dev"}
+{"query": "How long do I have to send something back?", "expected": ["doc_02"], "split": "dev"}
+{"query": "When will my money come back to me?", "expected": ["doc_02"], "split": "dev"}
+{"query": "Can I return shampoo I already opened?", "expected": ["doc_02"], "split": "dev"}
+{"query": "Do I have to pay to send an item back?", "expected": ["doc_02"], "split": "dev"}
+{"query": "What do I get if I subscribe monthly?", "expected": ["doc_03"], "split": "dev"}
+{"query": "How much is the premium plan?", "expected": ["doc_03"], "split": "dev"}
+{"query": "If I stop my subscription halfway through the month, do I get money back?", "expected": ["doc_03"], "split": "dev"}
+{"query": "Is there a plan that gives me early access to deals?", "expected": ["doc_03"], "split": "dev"}
+{"query": "How can I see where my rider is?", "expected": ["doc_04"], "split": "dev"}
+{"query": "My order has not moved in half an hour, what should I do?", "expected": ["doc_04"], "split": "dev"}
+{"query": "Does the arrival time update by itself?", "expected": ["doc_04"], "split": "dev"}
+{"query": "Can I stop an order after placing it?", "expected": ["doc_05"], "split": "dev"}
+{"query": "Why can I no longer call off my order?", "expected": ["doc_05"], "split": "dev"}
+{"query": "What happens if no rider is available?", "expected": ["doc_05"], "split": "dev"}
+{"query": "Something was missing from my bag, what now?", "expected": ["doc_06", "doc_02"], "split": "dev"}
+{"query": "Do I need to send a photo if my order was expensive?", "expected": ["doc_06"], "split": "dev"}
+{"query": "An item arrived crushed, do I have to send it back?", "expected": ["doc_06", "doc_02"], "split": "dev"}
+{"query": "What amounts can I buy a voucher for?", "expected": ["doc_07"], "split": "dev"}
+{"query": "How long before a voucher expires?", "expected": ["doc_07"], "split": "dev"}
+{"query": "Can I use two vouchers at once?", "expected": ["doc_07"], "split": "dev"}
+{"query": "Can I turn my voucher into cash?", "expected": ["doc_07"], "split": "dev"}
+{"query": "When can I talk to someone?", "expected": ["doc_08"], "split": "dev"}
+{"query": "How quickly do you reply to emails?", "expected": ["doc_08"], "split": "dev"}
+{"query": "Is there a number I can ring?", "expected": ["doc_08"], "split": "dev"}
+{"query": "Who won the world cup?", "expected": [], "split": "dev"}
+{"query": "What is the capital of France?", "expected": [], "split": "dev"}
+{"query": "How do I bake sourdough bread?", "expected": [], "split": "dev"}
+{"query": "What is the weather tomorrow?", "expected": [], "split": "dev"}
+{"query": "Recommend a good film to watch tonight", "expected": [], "split": "dev"}
+{"query": "Is delivery free if I spend enough?", "expected": ["doc_01"], "split": "test"}
+{"query": "What is the minimum order to avoid a charge?", "expected": ["doc_01"], "split": "test"}
+{"query": "Can I get it in under half an hour?", "expected": ["doc_01"], "split": "test"}
+{"query": "Is there a rush option at checkout?", "expected": ["doc_01"], "split": "test"}
+{"query": "My pin code is not on your list, will you still come?", "expected": ["doc_01"], "split": "test"}
+{"query": "The milk I got smells off, can I get my money back?", "expected": ["doc_02"], "split": "test"}
+{"query": "How many days do I have for a sealed packet of biscuits?", "expected": ["doc_02"], "split": "test"}
+{"query": "Can the refund go to my wallet instead of my card?", "expected": ["doc_02"], "split": "test"}
+{"query": "Do you collect the item from my house?", "expected": ["doc_02"], "split": "test"}
+{"query": "Is a face cream I already used refundable?", "expected": ["doc_02"], "split": "test"}
+{"query": "What are the different plans you offer?", "expected": ["doc_03"], "split": "test"}
+{"query": "Does the cheapest plan cost anything?", "expected": ["doc_03"], "split": "test"}
+{"query": "How do I stop paying every month?", "expected": ["doc_03"], "split": "test"}
+{"query": "Which tier gets free fast delivery?", "expected": ["doc_03"], "split": "test"}
+{"query": "What discount do members get on selected categories?", "expected": ["doc_03"], "split": "test"}
+{"query": "Can I watch my order move on a map?", "expected": ["doc_04"], "split": "test"}
+{"query": "Where do I find the screen that follows my order?", "expected": ["doc_04"], "split": "test"}
+{"query": "The arrival estimate keeps changing, is that normal?", "expected": ["doc_04"], "split": "test"}
+{"query": "My delivery seems stuck, when should I start worrying?", "expected": ["doc_04"], "split": "test"}
+{"query": "How long do I have to change my mind after ordering?", "expected": ["doc_05"], "split": "test"}
+{"query": "Is there a charge for calling it off early?", "expected": ["doc_05"], "split": "test"}
+{"query": "Nobody was available to bring my order, do I lose my money?", "expected": ["doc_05"], "split": "test"}
+{"query": "Why has the cancel button disappeared?", "expected": ["doc_05"], "split": "test"}
+{"query": "Two things were not in the bag when it arrived", "expected": ["doc_06", "doc_02"], "split": "test"}
+{"query": "Do you send a replacement or just give the money back?", "expected": ["doc_06"], "split": "test"}
+{"query": "Where is the button to report a problem with my order?", "expected": ["doc_06"], "split": "test"}
+{"query": "My order was over a thousand rupees and something was spoiled", "expected": ["doc_06"], "split": "test"}
+{"query": "My groceries came spoiled, how do I get refunded?", "expected": ["doc_06", "doc_02"], "split": "test"}
+{"query": "Do gift cards run out after a while?", "expected": ["doc_07"], "split": "test"}
+{"query": "How soon does a gift card arrive after I buy it?", "expected": ["doc_07"], "split": "test"}
+{"query": "Can I pay with a card and a voucher together?", "expected": ["doc_07"], "split": "test"}
+{"query": "Are there any charges for holding on to a gift card?", "expected": ["doc_07"], "split": "test"}
+{"query": "Can I message you at three in the morning?", "expected": ["doc_08"], "split": "test"}
+{"query": "How long does chat take to answer?", "expected": ["doc_08"], "split": "test"}
+{"query": "Do you have a helpline I can dial?", "expected": ["doc_08"], "split": "test"}
+{"query": "What is the best way to reach you about something not urgent?", "expected": ["doc_08"], "split": "test"}
+{"query": "Convert 500 dollars to rupees", "expected": [], "split": "test"}
+{"query": "Write me a poem about the sea", "expected": [], "split": "test"}
+{"query": "What is 17 times 23?", "expected": [], "split": "test"}
+{"query": "Who is the prime minister of India?", "expected": [], "split": "test"}
+{"query": "Tell me a joke", "expected": [], "split": "test"}
+{"query": "How do I fix a flat tyre?", "expected": [], "split": "test"}
+{"query": "What are the symptoms of the flu?", "expected": [], "split": "test"}

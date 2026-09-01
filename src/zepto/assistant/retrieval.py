@@ -16,6 +16,22 @@ Ingestion is idempotent by construction. v1 skipped ingestion whenever the
 collection already held enough rows, which meant edited corpus text was silently
 never re-indexed. Upserting by stable id re-indexes changed content and cannot
 duplicate unchanged content.
+
+Whole-document embedding and pure dense retrieval are a measured choice, not an
+unexamined default. Sentence-level chunking and hybrid dense+BM25 fusion were
+both built and evaluated against the dev split, and both made retrieval worse:
+
+    baseline (whole doc, dense)       86.2% hit@1   MRR 0.914
+    sentence chunks, dense            75.9% hit@1   MRR 0.856
+    whole doc, dense + bm25           79.3% hit@1   MRR 0.851
+    sentence chunks, dense + bm25     65.5% hit@1   MRR 0.799
+
+Sentences lose the context that disambiguates them; BM25 is structurally
+disadvantaged here because the evaluation set deliberately avoids corpus wording,
+so lexical overlap is mostly noise. Neither was shipped. `experiments/
+retrieval_ablation.py` reproduces the table -- rerun it before proposing either
+again, particularly if the corpus grows into longer, multi-topic documents, where
+the chunking argument would genuinely start to apply.
 """
 
 from __future__ import annotations

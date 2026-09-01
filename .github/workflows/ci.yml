@@ -54,3 +54,65 @@ jobs:
 
       - name: Test
         run: pytest
+
+  image:
+    name: Build and scan the service image
+    runs-on: ubuntu-latest
+    # Only worth the build time once the code itself is known good.
+    needs: quality
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Loaded into the local daemon rather than pushed: this job proves the
+      # image builds and is clean, it does not publish.
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          tags: zepto-assistant:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Proves the container actually serves, not merely that it builds. A
+      # health check that never runs in CI is a health check nobody trusts.
+      - name: Run the container and check it answers
+        run: |
+          docker run -d --name zepto-ci -p 8000:8000 zepto-assistant:ci
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/ready >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:8000/ready
+          curl -fsS -X POST http://127.0.0.1:8000/ask \
+            -H 'Content-Type: application/json' \
+            -d '{"query":"How much is the delivery fee?"}' \
+            | tee /dev/stderr | grep -q '"intent":"policy_question"'
+          curl -fsS http://127.0.0.1:8000/metrics | grep -q '^zepto_documents_indexed 8.0$'
+          docker rm -f zepto-ci
+
+      # --ignore-unfixed, and the reason matters: the Debian base carries HIGH
+      # and CRITICAL advisories with no upstream fix available, so failing on
+      # them would mean a permanently red build that no change here can turn
+      # green -- which trains people to ignore the scanner. This gates on what
+      # is actionable; the rest is recorded in docker/README.md and rechecked
+      # when the base image is bumped.
+      - name: Scan image for fixable vulnerabilities
+        # Pinned to a commit, not a tag. A tag on a third-party action is a
+        # mutable pointer someone else controls, and this one runs with the
+        # job's token: retagging it is a supply-chain path straight into CI.
+        # ed142fd is v0.36.0.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: zepto-assistant:ci
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
