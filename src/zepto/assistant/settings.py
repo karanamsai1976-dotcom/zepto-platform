@@ -90,6 +90,17 @@ class AssistantSettings(BaseSettings):
         description="Length of the fixed window, in seconds.",
     )
     rate_limit_enabled: bool = Field(default=True)
+    trusted_proxy_count: int = Field(
+        default=0,
+        ge=0,
+        description="How many reverse proxies sit in front of this service. Zero "
+        "means X-Forwarded-For is ignored entirely, which is the only safe "
+        "default: when nothing trustworthy sets that header, a caller can set it "
+        "themselves and mint a fresh rate-limit bucket per request. Set it to 1 "
+        "behind a single proxy (Hugging Face Spaces, a load balancer), where the "
+        "opposite failure applies -- every caller arrives from the proxy's "
+        "address and shares one bucket, so one client can exhaust everyone's quota.",
+    )
 
     # --- Bind address ---
     host: str = Field(

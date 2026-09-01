@@ -183,6 +183,19 @@ without reaching the network. [`docker/README.md`](docker/README.md) records the
 measured behaviour and the known limitations, including 38 base-OS advisories
 with no upstream fix.
 
+## Deploying
+
+```bash
+python deploy/huggingface/build_space.py
+```
+
+Assembles a pushable Hugging Face Space in `build/space/`. The generated
+Dockerfile is this repository's own, copied verbatim, with one clearly marked
+block of deployment settings appended — so the difference between what CI tests
+and what runs in production is exactly that block, rather than a second
+Dockerfile free to drift from the first. [`deploy/README.md`](deploy/README.md)
+has the settings, the verification, and what remains unverified.
+
 ## Generating a model card
 
 ```bash
@@ -396,7 +409,7 @@ was answered, not because code was written.
 | 4 unfixed CVEs in chromadb 1.5.9, two of them CRITICAL | 1.5.9 is the newest release; there is nothing to upgrade to. Exposure is reduced by how it is used — embedded `PersistentClient`, no chroma server, one listening socket in the container (verified via `/proc/net/tcp`) — but reduced is not fixed. `docker/README.md` has the detail. |
 | 16 unfixed Debian advisories in the image | No upstream fix exists. Down from 26 after moving the base to trixie. |
 | Out-of-scope recall is 85.7% on held-out data | `"Convert 500 dollars to rupees"` clears the relevance floor. Deliberately not fixed by moving the floor, because retuning on the split that caught it is what the split exists to prevent. |
-| No public deployment | Runs locally and in Docker; nothing is hosted. |
+| Hosting is unverified | The container is verified end to end, but `TRUSTED_PROXY_COUNT=1` assumes exactly one proxy in front of the Space. That matches how Spaces is documented to work and has not been confirmed against a live one. See `deploy/README.md`. |
 
 ### v1 defects addressed so far
 

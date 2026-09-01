@@ -159,3 +159,39 @@ def client_identifier(api_key: str | None, remote_address: str | None) -> str:
     if api_key:
         return f"key:{fingerprint(api_key)}"
     return f"addr:{remote_address or 'unknown'}"
+
+
+def client_address(
+    forwarded_for: str | None,
+    remote_address: str | None,
+    trusted_proxy_count: int,
+) -> str | None:
+    """The caller's address, reading X-Forwarded-For only when it is trustworthy.
+
+    Both directions of getting this wrong are real, and they fail in opposite
+    ways.
+
+    Trusting the header when nothing sets it lets any caller supply their own
+    value, so every request looks like a new client and the rate limit stops
+    limiting anything. Ignoring it behind a proxy is the mirror image: every
+    request arrives from the proxy's address, all callers share one bucket, and
+    one client can exhaust the quota for everyone.
+
+    So the header is used only when the deployment declares how many proxies
+    sit in front, and the address is taken by counting in from the right --
+    each proxy appends the address it received from, so with N trusted proxies
+    the (N)th entry from the end is the one the outermost proxy actually saw.
+    Entries to the left of that were supplied by the caller and are ignored.
+
+    A header shorter than the declared chain means the request did not arrive
+    the way the configuration says it does, so it is discarded rather than
+    guessed at.
+    """
+    if trusted_proxy_count <= 0 or not forwarded_for:
+        return remote_address
+
+    parts = [part.strip() for part in forwarded_for.split(",") if part.strip()]
+    if len(parts) < trusted_proxy_count:
+        return remote_address
+
+    return parts[-trusted_proxy_count]
