@@ -104,7 +104,11 @@ jobs:
       # is actionable; the rest is recorded in docker/README.md and rechecked
       # when the base image is bumped.
       - name: Scan image for fixable vulnerabilities
-        uses: aquasecurity/trivy-action@0.28.0
+        # Pinned to a commit, not a tag. A tag on a third-party action is a
+        # mutable pointer someone else controls, and this one runs with the
+        # job's token: retagging it is a supply-chain path straight into CI.
+        # ed142fd is v0.36.0.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: zepto-assistant:ci
           scanners: vuln
