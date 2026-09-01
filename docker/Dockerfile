@@ -20,7 +20,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1: build the virtualenv
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim-bookworm@sha256:0f5b26b9518d002b6173fd61daad821fa340635ebfec5bba471013f9ca114579 AS builder
+FROM python:3.12-slim-trixie@sha256:e5c9fa26ffb76e11e0f054f30dc2523a2f9693f0c36c0cf1e39b27e152d899fc AS builder
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -43,7 +43,7 @@ RUN /opt/venv/bin/pip install --no-cache-dir --no-deps .
 # ---------------------------------------------------------------------------
 # Stage 2: runtime
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim-bookworm@sha256:0f5b26b9518d002b6173fd61daad821fa340635ebfec5bba471013f9ca114579 AS runtime
+FROM python:3.12-slim-trixie@sha256:e5c9fa26ffb76e11e0f054f30dc2523a2f9693f0c36c0cf1e39b27e152d899fc AS runtime
 
 LABEL org.opencontainers.image.title="zepto-support-assistant" \
       org.opencontainers.image.description="Retrieval-augmented support assistant over the Zepto policy corpus" \
