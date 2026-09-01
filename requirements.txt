@@ -1,0 +1,17 @@
+# Dependencies for Streamlit Community Cloud, which installs from a
+# requirements.txt at the repository root and offers no way to select an extra.
+#
+# The pinned set comes first, from the same lock the container image is built
+# from, so the hosted app runs the versions that were actually tested rather
+# than whatever the resolver picks on deploy day. The local package is listed
+# last: by then its dependencies are already satisfied, so pip installs the
+# package without re-resolving around the pins.
+#
+# Regenerate the lock with the command in docker/requirements-assistant.lock.
+
+-r docker/requirements-assistant.lock
+
+# Not in the lock: the container image serves FastAPI and has no use for it.
+streamlit>=1.40
+
+.

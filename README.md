@@ -185,16 +185,23 @@ with no upstream fix.
 
 ## Deploying
 
+Two front ends, one package. [`streamlit_app.py`](streamlit_app.py) is a
+Streamlit UI for Streamlit Community Cloud, which is free and needs no card;
+`docker/Dockerfile` is the FastAPI service, which Hugging Face Spaces will host
+but now requires a paid plan for.
+
+Neither front end decides anything. Both call `zepto.assistant`, so they cannot
+disagree, and a test asserts the Streamlit file defines nothing beyond its three
+presentation functions — the same rule the notebooks follow, for the same
+reason.
+
 ```bash
-python deploy/huggingface/build_space.py
+streamlit run streamlit_app.py                       # the UI, locally
+python deploy/huggingface/build_space.py             # assemble a Space to push
 ```
 
-Assembles a pushable Hugging Face Space in `build/space/`. The generated
-Dockerfile is this repository's own, copied verbatim, with one clearly marked
-block of deployment settings appended — so the difference between what CI tests
-and what runs in production is exactly that block, rather than a second
-Dockerfile free to drift from the first. [`deploy/README.md`](deploy/README.md)
-has the settings, the verification, and what remains unverified.
+[`deploy/README.md`](deploy/README.md) has both paths, what was verified, and
+what is not verified until it is actually hosted.
 
 ## Generating a model card
 
