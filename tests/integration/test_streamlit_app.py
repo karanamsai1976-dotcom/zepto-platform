@@ -114,3 +114,44 @@ def test_the_ui_imports_its_behaviour_from_the_package() -> None:
     }
 
     assert any(module.startswith("zepto.") for module in imported)
+
+
+def test_an_example_button_fills_and_answers_the_question(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The example buttons are the first thing a visitor clicks, and they take a
+    different path from typing: a button writes to session state, and the text
+    input reads its value back on the rerun."""
+    app = run_app(tmp_path, monkeypatch)
+
+    app.button[0].click().run()
+
+    assert not app.exception
+    assert app.text_input[0].value == "How much is the delivery fee?"
+    assert "INR 25" in app.success[0].value
+
+
+def test_every_example_button_is_labelled_distinctly_by_topic(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Deriving labels from the questions produced "How", "Can", "How", "Do",
+    "Who" -- two identical and none naming a topic. A button has to say what
+    pressing it does, and that is worth a test because the defect is invisible
+    in the source and obvious on screen."""
+    app = run_app(tmp_path, monkeypatch)
+
+    labels = [button.label for button in app.button]
+
+    assert labels == ["Delivery", "Returns", "Tracking", "Support", "Off-topic"]
+    assert len(set(labels)) == len(labels)
+
+
+def test_a_blank_question_renders_nothing_rather_than_failing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The state every visitor sees first."""
+    app = run_app(tmp_path, monkeypatch, query="   ")
+
+    assert not app.exception
+    assert not app.success
+    assert not app.warning

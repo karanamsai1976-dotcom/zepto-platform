@@ -24,12 +24,16 @@ from zepto.assistant.retrieval import VectorStore, load_corpus
 from zepto.assistant.settings import get_assistant_settings
 from zepto.core.logging import configure_logging
 
+#: (button label, question). The label is written rather than derived from the
+#: question: taking the first word gave "How", "Can", "How", "Do", "Who" -- two
+#: of them identical and none of them naming a topic. A button has to say what
+#: pressing it does.
 EXAMPLES = (
-    "How much is the delivery fee?",
-    "Can I return an opened bottle of shampoo?",
-    "How do I track where my rider is?",
-    "Do you have a helpline I can dial?",
-    "Who won the world cup?",
+    ("Delivery", "How much is the delivery fee?"),
+    ("Returns", "Can I return an opened bottle of shampoo?"),
+    ("Tracking", "How do I track where my rider is?"),
+    ("Support", "Do you have a helpline I can dial?"),
+    ("Off-topic", "Who won the world cup?"),
 )
 
 
@@ -100,8 +104,8 @@ def main() -> None:
         st.session_state.query = ""
 
     st.caption("Try one:")
-    for column, example in zip(st.columns(len(EXAMPLES)), EXAMPLES, strict=True):
-        if column.button(example.split()[0].rstrip("?"), help=example):
+    for column, (label, example) in zip(st.columns(len(EXAMPLES)), EXAMPLES, strict=True):
+        if column.button(label, help=example, width="stretch"):
             st.session_state.query = example
 
     query = st.text_input(

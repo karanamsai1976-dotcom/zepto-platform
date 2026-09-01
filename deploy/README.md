@@ -19,6 +19,8 @@ nothing beyond its three presentation functions.
 Nothing to build or generate. Community Cloud installs from `requirements.txt`
 at the repository root and runs `streamlit_app.py`.
 
+Deployed at <https://zepto-platform-oj3srsmpcuiakndnabzce7.streamlit.app>.
+
 1. Sign in at <https://share.streamlit.io> with GitHub and authorise it.
 2. **Create app** -> **Deploy a public app from GitHub**.
 3. Repository `karanamsai1976-dotcom/zepto-platform`, branch `main`, main file
