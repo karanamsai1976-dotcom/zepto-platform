@@ -55,6 +55,12 @@ class Metrics:
             "Requests refused for a missing or invalid API key.",
             registry=self.registry,
         )
+        self.suspected_injection = Counter(
+            "zepto_suspected_injection_total",
+            "Questions matching a known prompt-injection phrasing. Telemetry, "
+            "not a block: see sanitization.py for why this is not a filter.",
+            registry=self.registry,
+        )
         self.answers = Counter(
             "zepto_answers_total",
             "Questions answered, by whether the corpus covered them.",

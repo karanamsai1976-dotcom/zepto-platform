@@ -7,20 +7,30 @@ assistant served over HTTP.
 ## Status
 
 **All four modules are ported and verified end to end** — `core`, `ingestion`,
-`analytics`, and `assistant` — fully typed, covered by 342 tests at ~100% branch
-coverage, enforced in CI on every push.
+`analytics`, and `assistant` — fully typed, covered by 418 tests at ~100% branch
+coverage, enforced in CI on every push. The assistant also ships as a container
+image that CI builds, runs, queries, and vulnerability-scans on every change.
 
-Latest measured assistant quality, against a labelled 34-case evaluation set
-(`zepto-eval`):
+Latest measured assistant quality, against a labelled 77-case evaluation set
+(`zepto-eval`). The two splits are reported separately on purpose: `dev` is what
+the relevance floor was tuned against, and `test` was held back from every tuning
+decision, so only the second column estimates performance on questions nobody
+fitted to.
 
-| Metric | Score |
-| --- | --- |
-| Retrieval hit rate @1 | 86.2% |
-| Retrieval hit rate @3 | 96.6% |
-| Mean reciprocal rank | 0.914 |
-| Scope decision accuracy | 100% |
-| In-scope questions answered | 100% |
-| Out-of-scope questions declined | 100% |
+| Metric | dev (34) | test (43, held out) |
+| --- | --- | --- |
+| Retrieval hit rate @1 | 86.2% | 88.9% |
+| Retrieval hit rate @3 | 96.6% | 100% |
+| Mean reciprocal rank | 0.914 | 0.940 |
+| Scope decision accuracy | 100% | 97.7% |
+| In-scope questions answered | 100% | 100% |
+| Out-of-scope questions declined | 100% | **85.7%** |
+
+The last cell is the one worth reading. Retrieval generalises; the scope decision
+does not, quite. `"Convert 500 dollars to rupees"` clears the relevance floor
+because currency wording sits close to the delivery-fee document. It is left
+standing rather than fixed by moving the floor, since retuning on the split that
+caught it is exactly what the split exists to prevent.
 
 Latest verified ingestion run against the live source:
 
@@ -137,6 +147,41 @@ ZEPTO_ASSISTANT_MIN_RELEVANCE=0.20   # decline more readily
 ZEPTO_ASSISTANT_MAX_QUERY_LENGTH=300
 ZEPTO_ASSISTANT_MOCK_LLM=false       # requires GROQ_API_KEY and `pip install groq`
 ```
+
+### Hardening it for exposure
+
+Authentication and rate limiting are off and permissive by default, so the demo
+runs with no setup. Both fail closed when switched on — enabling authentication
+without configuring keys stops startup rather than serving an endpoint that
+believes it is protected.
+
+```bash
+ZEPTO_ASSISTANT_REQUIRE_API_KEY=true
+ZEPTO_ASSISTANT_API_KEYS=key-one,key-two   # sent as the X-API-Key header
+ZEPTO_ASSISTANT_RATE_LIMIT_REQUESTS=60     # per client, per window
+ZEPTO_ASSISTANT_RATE_LIMIT_WINDOW_SECONDS=60
+ZEPTO_ASSISTANT_HOST=0.0.0.0               # loopback by default
+```
+
+`/health`, `/ready`, and `/metrics` bypass both guards deliberately: probes hit
+them constantly, and a monitoring endpoint that needs a credential ends up
+unmonitored. `/metrics` serves Prometheus exposition labelled by matched route
+template rather than raw path, so unmatched URLs cannot inflate label
+cardinality.
+
+## Running it in Docker
+
+```bash
+docker build -f docker/Dockerfile -t zepto-assistant:0.1.0 .
+docker run -d -p 8000:8000 zepto-assistant:0.1.0
+```
+
+Base pinned by digest, dependencies from a lock generated inside the target
+container, build tooling discarded in a separate stage, runs as uid 10001, and
+the vector index plus embedding model baked at build time so a container starts
+without reaching the network. [`docker/README.md`](docker/README.md) records the
+measured behaviour and the known limitations, including 38 base-OS advisories
+with no upstream fix.
 
 ## Generating a model card
 
@@ -326,9 +371,31 @@ which is exactly how this class of harm normally goes unnoticed.
 | 4 | Retrieval evaluation: labelled set, hit rate, MRR, scope-decision scoring | ✅ Done |
 | 5 | Model card: intersectional disaggregation, trivial-baseline comparison | ✅ Done |
 | 6 | Narrative notebook over tested modules, with a CI rot guard | ✅ Done |
-| 7 | API hardening: auth, rate limiting, metrics, distributed tracing | Next |
-| 8 | RAG quality: reranking, chunking strategy, prompt-injection defenses | Planned |
-| 9 | Deployment: hardened image, dependency lockfile, secret management, monitoring | Planned |
+| 7 | API hardening: auth, rate limiting, metrics | ✅ Done |
+| 8 | RAG quality: chunking and hybrid retrieval measured and rejected; held-out eval split; prompt-injection containment | ✅ Done |
+| 9 | Deployment: hardened image, dependency lockfile, image scanning in CI | ✅ Done |
+
+Phase 7 originally listed distributed tracing. What shipped is request-id
+correlation on every log line and an echoed response header, which is what a
+single service needs. Spans across service boundaries would be instrumenting a
+boundary that does not exist here, so the item was dropped rather than
+half-satisfied and ticked.
+
+Phase 8 was planned as reranking and a chunking strategy. Both were built and
+measured, both made retrieval worse than the whole-document baseline, and
+neither shipped — see `experiments/retrieval_ablation.py` for the table and
+`retrieval.py` for the reasoning. The phase is marked done because the question
+was answered, not because code was written.
+
+### Not done, and known
+
+| Gap | Why it is still open |
+| --- | --- |
+| Secret management is environment variables | Adequate for a single container; a real deployment wants a secret store with rotation and audit. |
+| The real-LLM path has never made a live call | Fully exercised against a stub client, including retry and reply validation, but no request has ever reached Groq. Tested, not proven. |
+| 38 unfixed base-OS advisories in the image | No upstream fix exists. A distroless base would clear most of them. Recorded in `docker/README.md`. |
+| Out-of-scope recall is 85.7% on held-out data | `"Convert 500 dollars to rupees"` clears the relevance floor. Deliberately not fixed by moving the floor, because retuning on the split that caught it is what the split exists to prevent. |
+| No public deployment | Runs locally and in Docker; nothing is hosted. |
 
 ### v1 defects addressed so far
 
